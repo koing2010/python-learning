@@ -6,10 +6,12 @@ def MyTxThread():
 	circle = 0
 	while x < 50:
 		x = 1 + x
-		print('')
+		print('%d'% x)
 		time.sleep(0.5)
 		
-s = serial.Serial('com9',9600)
+#Comnumb = 'com9'
+Comnumb=input('输入串口号(如com9):')
+s = serial.Serial(Comnumb,9600)
 string = ' '
 s.setTimeout(2)
 thrd = threading.Thread(target=MyTxThread,name='koing2010')
