@@ -26,5 +26,4 @@ if __name__=='__main__':
 		s.write(string)
 		print(string)
 	s.close()#关闭串口
-	time.sleep(0.1)
 	pro.join()
