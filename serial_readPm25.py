@@ -22,7 +22,7 @@ for i in range(10000):
 		pass
 	string = s.read(1)
 	if chr(string[0]) == '\xaa':
-#	time.sleep(0.1)
+	time.sleep(0.1)
 		while s.inWaiting() < 6:
 			pass
 		string += s.read(6)
