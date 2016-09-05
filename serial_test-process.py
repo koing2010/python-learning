@@ -16,7 +16,7 @@ if __name__=='__main__':
 	string = ' '
 	pro = Process(target=MyTxProcess,args=('seria',))
 	pro.start()
-	for i in range(100):
+	for i in range(120):
 		print('第',i,'次读取')
 		while s.inWaiting() == 0:
 			pass
