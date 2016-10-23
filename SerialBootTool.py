@@ -3,6 +3,7 @@ import serial
 import time
 import threading
 import os
+import struct
 def MyTxThread():
 	time.sleep(10)
 	print('threading has gone !')
@@ -18,10 +19,22 @@ def HexShow(str):
 		hex_string += hhex + ' '
 #	print('ReceiveBytes: %str' % (hex_string))
 	print('ReceiveBytes:',hex_string,'  total:',hLen)
-	
+
+#crc16 calculat
+def cal_crc16(puchMsg,crc_count):
+	xorCRC = 0xA001
+	CRC = 0xFFFF
+	for i in range(crc_count):
+		CRC ^= puchMsg[i]
+		for j in range(8):
+			XORResult = CRC & 0x01
+			CRC >>= 1
+			if (XORResult & 0xFF):
+				CRC ^= xorCRC		
+	return CRC
 ###++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++###	
-#Comnumb = 'com3'
-Comnumb=input('输入串口号(如com9):')
+Comnumb = 'com4'
+#Comnumb=input('输入串口号(如com9):')
 s = serial.Serial(Comnumb,115200)
 if s._port is None:
 	print('Port must be configured before it can be used.')
@@ -40,9 +53,16 @@ path_str = os.path.abspath('.')
 path_str += '/testbin/MultiuTools.bin'
 file_t = open(path_str,'rb')#'rb' read bin format
 bin_size = os.path.getsize(path_str)/32;#get size of this 
-for c in range(int(bin_size)+1):
+for c in range(1):#int(bin_size)+1):
 	print('第',c,'次读取')
-	s.write(file_t.read(32))#read 16 bytes and tx it
+	tx_string = file_t.read(32)
+	tx_crc = cal_crc16(tx_string, 32)
+	tx_tytes = struct.pack('<H',tx_crc)
+	tx_string += tx_tytes
+#	tx_string += ord(chr(tx_crc&0xFF))
+#	tx_string[33] = (tx_crc>>8)&0xFF
+	#print(hex())
+	s.write(tx_string)#read 16 bytes and tx it
 	while s.inWaiting() == 0:#wait ack
 		pass
 	time.sleep(0.01)#delay 10ms
