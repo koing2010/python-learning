@@ -1,6 +1,7 @@
 import serial
 import time
 import threading
+import sys
 def MyTxThread():
 	x = 1
 	circle = 0
@@ -9,15 +10,15 @@ def MyTxThread():
 		print('%d'% x)
 		time.sleep(1.5)
 		
-def HexShow(str):
+def HexShow(i_string):
 	hex_string = ''
-	hLen = len(str)
+	hLen = len(i_string)
 	for i in range(hLen):
-		print('str',i,str[i])
-		hvol = ord(str[i])
+		print('str',i,i_string[i])
+		hvol = ord(i_string[i])
 		hhex = '0x%02X' % (hvol)
 		hex_string += hhex + ' '
-#	print('checkHex: %str' % (hex_string))
+	print('checkHex: %i_string' % (hex_string))
 	
 	
 #Comnumb = 'com9'
