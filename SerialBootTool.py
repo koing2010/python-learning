@@ -10,17 +10,17 @@ def MyTxThread():
 
 
 #display hex string 	
-def HexShow(str):
+def HexShow(i_string):
 	hex_string = ''
 	hLen = len(i_string)
 	for i in range(hLen):
-		hvol = str[i]
+		hvol = i_string[i]
 		hhex = '0x%02X' % (hvol)
 		hex_string += hhex + ' '
-#	print('ReceiveBytes: %str' % (hex_string))
+#	print('ReceiveBytes: %i_string' % (hex_string))
 	print('ReceiveBytes:',hex_string,'  total:',hLen)
 
-#crc16 calculat
+#crc16 calculate
 def cal_crc16(puchMsg,crc_count):
 	xorCRC = 0xA001
 	CRC = 0xFFFF
@@ -30,10 +30,10 @@ def cal_crc16(puchMsg,crc_count):
 			XORResult = CRC & 0x01
 			CRC >>= 1
 			if (XORResult & 0xFF):
-				CRC ^= xorCRC		
+				CRC ^= xorCRC
 	return CRC
 ###++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++###	
-Comnumb = 'com4'
+Comnumb = 'com10'
 #Comnumb=input('输入串口号(如com9):')
 s = serial.Serial(Comnumb,115200)
 if s._port is None:
@@ -53,11 +53,12 @@ path_str = os.path.abspath('.')
 path_str += '/testbin/MultiuTools.bin'
 file_t = open(path_str,'rb')#'rb' read bin format
 bin_size = os.path.getsize(path_str)/32;#get size of this 
-for c in range(1):#int(bin_size)+1):
+for c in range(int(bin_size)+1):
 	print('第',c,'次读取')
 	tx_string = file_t.read(32)
 	tx_crc = cal_crc16(tx_string, 32)
-	tx_tytes = struct.pack('<H',tx_crc)
+	
+	tx_tytes = struct.pack('<H',tx_crc)#low-endian
 	tx_string += tx_tytes
 #	tx_string += ord(chr(tx_crc&0xFF))
 #	tx_string[33] = (tx_crc>>8)&0xFF
