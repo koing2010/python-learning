@@ -53,23 +53,29 @@ path_str = os.path.abspath('.')
 path_str += '/testbin/MultiuTools.bin'
 file_t = open(path_str,'rb')#'rb' read bin format
 bin_size = os.path.getsize(path_str)/32;#get size of this 
-for c in range(int(bin_size)+1):
-	print('第',c,'次读取')
-	tx_string = file_t.read(32)
-	tx_crc = cal_crc16(tx_string, 32)
-	
-	tx_tytes = struct.pack('<H',tx_crc)#low-endian
-	tx_string += tx_tytes
-#	tx_string += ord(chr(tx_crc&0xFF))
-#	tx_string[33] = (tx_crc>>8)&0xFF
-	#print(hex())
-	s.write(tx_string)#read 16 bytes and tx it
-	while s.inWaiting() == 0:#wait ack
-		pass
-	time.sleep(0.01)#delay 10ms
-	numb = s.inWaiting()#read the numb of bytes received
-	string = s.read(numb)
-	HexShow(string)
+if bin_size > (256-20)*1024/32: # 256K(total flash) -20K(boot sector)
+	print("Bin file size is out of size allowed! Please recheck~~")
+else:
+# send handshake command
+	for handshake_time_retry in range(3):
+		handshake_str = b'\x5A\xA5\x10\x01\x01\x00\x00\x00\x02\x02\x01\xA5\x5A'
+	for c in range(int(bin_size)+1):
+		print('第',c,'次读取')
+		tx_string = file_t.read(32)
+		tx_crc = cal_crc16(tx_string, 32)
+		
+		tx_tytes = struct.pack('<H',tx_crc)#low-endian
+		tx_string += tx_tytes
+	#	tx_string += ord(chr(tx_crc&0xFF))
+	#	tx_string[33] = (tx_crc>>8)&0xFF
+		#print(hex())
+		s.write(tx_string)#read 16 bytes and tx it
+		while s.inWaiting() == 0:#wait ack
+			pass
+		time.sleep(0.01)#delay 10ms
+		numb = s.inWaiting()#read the numb of bytes received
+		string = s.read(numb)
+		HexShow(string)
 #	s.write(string)
 #	s.write('\x5A\xA5\x10\x01\x01\x00\x00\x00\x02\x02\x01\xA5\x5A')
 file_t.close()# close bin file
