@@ -33,7 +33,7 @@ def cal_crc16(puchMsg,crc_count):
 				CRC ^= xorCRC
 	return CRC
 ###++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++###	
-Comnumb = 'com19'
+Comnumb = 'com5'
 #Comnumb=input('输入串口号(如com9):')
 s = serial.Serial(Comnumb,115200)
 if s._port is None:
@@ -53,7 +53,7 @@ path_str = os.path.abspath('.')
 path_str += '/testbin/MultiuTools.bin'
 file_t = open(path_str,'rb')#'rb' read bin format
 bin_size = os.path.getsize(path_str)/32;#get size of this 
-if bin_size > (256-20)*1024/32: # 256K(total flash) -20K(boot sector)
+if bin_size > (256-20)*1024: # 256K(total flash) -20K(boot sector)
 	print("Bin file size is out of size allowed! Please recheck~~")
 else:
 # send handshake command:  
@@ -62,15 +62,23 @@ else:
 	Send_SN = 1 
 	for handshake_time_retry in range(3):
 		#send total size of bin file
-		tx_forme = struct.pack('<H',Send_SN) + struct.pack('<H',4) + struct.pack('<I', bin_size)# H 2bytes,I 4bytes
-		tx_string = '\xAA\xAA' + tx_forme +   struct.pack('<H',cal_crc16(tx_forme,7))
+		tx_forme = struct.pack('<H',Send_SN) + struct.pack('<B',4) + struct.pack('<I', int(bin_size))# H 2bytes,B 1byte,I 4bytes
+		tx_string = struct.pack('<H',0xAAAA) + tx_forme +   struct.pack('<H',cal_crc16(tx_forme,7))
 		s.write(tx_string)
 		#wait ack of handshake
 		while s.inWaiting() == 0:#wait ack
 			pass
 		ack_numb = s.inWaiting()#read the numb of bytes received
-		if ack_numb == 11:
-			print("handshake OK ！")
+		tx_string = s.read(2)
+		tx_string = s.read(ack_numb - 2)
+		
+		if (ack_numb == 11) and ((tx_string[8]*256 + tx_string[7]) == cal_crc16(tx_string,tx_string[2]+3)):
+			print("handshake SUCCESS !")
+			HexShow(tx_string)
+			break
+		else:
+			print("handshake FAILED  ! ack_numb = %d"%ack_numb)
+			HexShow(tx_string)
 	for c in range(int(bin_size)+1):
 		print('第',c,'次读取')
 		tx_string = file_t.read(32)
