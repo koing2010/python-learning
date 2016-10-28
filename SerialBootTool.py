@@ -33,7 +33,7 @@ def cal_crc16(puchMsg,crc_count):
 				CRC ^= xorCRC
 	return CRC
 ###++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++###	
-Comnumb = 'com10'
+Comnumb = 'com19'
 #Comnumb=input('输入串口号(如com9):')
 s = serial.Serial(Comnumb,115200)
 if s._port is None:
@@ -56,16 +56,27 @@ bin_size = os.path.getsize(path_str)/32;#get size of this
 if bin_size > (256-20)*1024/32: # 256K(total flash) -20K(boot sector)
 	print("Bin file size is out of size allowed! Please recheck~~")
 else:
-# send handshake command
+# send handshake command:  
+# 2Byte start code AA AA  + 2Bytes code SN + 1byte lenth of frame except start code + nbytes datas +2bytes crc16
+# the frame size  = 2bytes + 2Byte + 1byte + 2bytes + nbytes
+	Send_SN = 1 
 	for handshake_time_retry in range(3):
-		handshake_str = b'\x5A\xA5\x10\x01\x01\x00\x00\x00\x02\x02\x01\xA5\x5A'
+		#send total size of bin file
+		tx_forme = struct.pack('<H',Send_SN) + struct.pack('<H',4) + struct.pack('<I', bin_size)# H 2bytes,I 4bytes
+		tx_string = '\xAA\xAA' + tx_forme +   struct.pack('<H',cal_crc16(tx_forme,7))
+		s.write(tx_string)
+		#wait ack of handshake
+		while s.inWaiting() == 0:#wait ack
+			pass
+		ack_numb = s.inWaiting()#read the numb of bytes received
+		if ack_numb == 11:
+			print("handshake OK ！")
 	for c in range(int(bin_size)+1):
 		print('第',c,'次读取')
 		tx_string = file_t.read(32)
 		tx_crc = cal_crc16(tx_string, 32)
 		
-		tx_tytes = struct.pack('<H',tx_crc)#low-endian
-		tx_string += tx_tytes
+		tx_string += struct.pack('<H',tx_crc)#low-endian
 	#	tx_string += ord(chr(tx_crc&0xFF))
 	#	tx_string[33] = (tx_crc>>8)&0xFF
 		#print(hex())
