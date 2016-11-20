@@ -18,6 +18,8 @@ ManufactureAtrr  = 0x02
 ModelIDAtrr  = 0x03
 FileSizeAtrr  = 0x0A
 FileDataAtrr  = 0x0B
+# define the ack status
+StatusSuccess = 0x00
 
 def MyTxThread():
 	time.sleep(20)
@@ -48,7 +50,7 @@ def cal_crc16(puchMsg,crc_count):
 				CRC ^= xorCRC
 	return CRC
 ###++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++###	
-Comnumb = 'com6'
+Comnumb = 'com5'
 #Comnumb=input('输入串口号(如com9):')
 s = serial.Serial(Comnumb,115200)
 if s._port is None:
@@ -114,7 +116,7 @@ else:
 		numb = s.inWaiting()#read the numb of bytes received
 		string = s.read(2) 
 		string = s.read(numb-2) 
-		if (numb == 10) and (string[2] is WriteRspCmd)and ((string[7]*256 + string[6]) == cal_crc16(string,string[4]+3)):# 2 = (SN + W_CMD +ATRR+ SIZE -CRC16)
+		if (numb == 10) and (string[2] is WriteRspCmd)and( (string[5] is StatusSuccess))and ((string[7]*256 + string[6]) == cal_crc16(string,string[4]+3)):# 2 = (SN + W_CMD +ATRR+ SIZE -CRC16)
 		    #print('Loading... %d\r'%(c/bin_size*100),)
 			sys.stdout.write("\rLoading... %.1f %%"%(c*32/bin_size*100))
 			#HexShow(string)
@@ -129,11 +131,12 @@ tx_string = struct.pack('<H',0xAAAA) + tx_forme + struct.pack('<H',cal_crc16(tx_
 #	tx_string[33] = (tx_crc>>8)&0xFF
 #print(hex())
 #HexShow(tx_string)
-s.write(tx_string)#read 16 bytes and tx it
-#	s.write(string)
-#	s.write('\x5A\xA5\x10\x01\x01\x00\x00\x00\x02\x02\x01\xA5\x5A')
-file_t.close()# close bin file
+s.write(tx_string)#send mcu jump cmd
+print('\nLoading success and jump to application...')
 print('bin file has been closed !')
+#s.write('\x5A\xA5\x10\x01\x01\x00\x00\x00\x02\x02\x01\xA5\x5A')
+file_t.close()# close bin file
+
 s.close()
 input('Press Enter Key Exit~')
 thrd.join()
