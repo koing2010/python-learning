@@ -11,6 +11,8 @@ ReadRspCmd=0x02
 WriteCmd=0x03
 WriteRspCmd=0x04
 DefaultRspCmd = 0x05
+#Attribute define
+TotalSizeAttr = 0x01
 def MyTxThread():
 	time.sleep(20)
 	print('threading has gone !')
