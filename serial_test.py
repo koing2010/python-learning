@@ -11,12 +11,12 @@ def MyTxThread():
 		
 #Comnumb = 'com9'
 Comnumb=input('输入串口号(如com9):')
-s = serial.Serial(Comnumb,9600)
+s = serial.Serial(Comnumb,115200)
 string = ' '
-s.setTimeout(2)
+s.setTimeout(0)
 thrd = threading.Thread(target=MyTxThread,name='koing2010')
 thrd.start()
-for i in range(100):
+for i in range(1000):
 	print('第',i,'次读取')
 	while s.inWaiting() == 0:
 		pass

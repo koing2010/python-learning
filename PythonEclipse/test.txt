@@ -1,0 +1,25 @@
+Finding files... done.
+Importing test modules ... 32
+ReceiveBytes: 5A A5 10 01 54 80 00 00 15 85 E0 C0 C3 0C 00 4B 12 00 01 00 05 00 02 06 10 00 00 00 01 00 A5 5A    total: 32
+Alarm Report
+2017-03-09 16:23:44
+32
+ReceiveBytes: 5A A5 10 01 55 80 00 00 15 85 7E FA 6A 07 00 4B 12 00 01 00 05 00 02 06 11 00 00 00 01 00 A5 5A    total: 32
+Alarm Report
+2017-03-09 16:24:41
+32
+ReceiveBytes: 5A A5 10 01 56 80 00 00 15 85 E0 C0 C3 0C 00 4B 12 00 01 00 05 00 02 06 10 00 00 00 01 00 A5 5A    total: 32
+Alarm Report
+2017-03-09 16:43:43
+32
+ReceiveBytes: 5A A5 10 01 57 80 00 00 15 85 7E FA 6A 07 00 4B 12 00 01 00 05 00 02 06 11 00 00 00 01 00 A5 5A    total: 32
+Alarm Report
+2017-03-09 16:44:42
+32
+ReceiveBytes: 5A A5 10 01 58 80 00 00 15 85 E0 C0 C3 0C 00 4B 12 00 01 00 05 00 02 06 10 00 00 00 01 00 A5 5A    total: 32
+Alarm Report
+2017-03-09 17:03:43
+32
+ReceiveBytes: 5A A5 10 01 59 80 00 00 15 85 7E FA 6A 07 00 4B 12 00 01 00 05 00 02 06 11 00 00 00 01 00 A5 5A    total: 32
+Alarm Report
+2017-03-09 17:04:42

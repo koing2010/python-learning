@@ -76,7 +76,7 @@ def encrypt(src,size_src,key):
 #******************************************************************************
 
 
-InputMac=input('Input MAC eg:01 02 03 04 05 06 07 08"')
+InputMac=input('Input MAC eg:00 12 4B 00 07 6B 03 44"')
 MySalt = (b'\x0A\x0B\x0C\x0D\x0E\x0F\x1A\xAB')
 if len(InputMac) is 23:
 	print('success')
