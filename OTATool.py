@@ -39,7 +39,7 @@ StatusSuccess = 0x00
 
 def MyTxThread():
 	time.sleep(20)
-	print('threading has gone !')
+	print('Waiting!')
 
 
 def PackSendData( SendMsg, endpoint, cluster, headControl, Cmd):
@@ -49,7 +49,7 @@ def PackSendData( SendMsg, endpoint, cluster, headControl, Cmd):
 	SendMsg = SendMsg + struct.pack('<H', cal_crc16(SendMsg, len(SendMsg))) # add crc
 	return SendMsg
 #display hex string
-def HexShow(i_string):
+def HexShow(S_name,i_string):
 	hex_string = ''
 	hLen = len(i_string)
 	for i in range(hLen):
@@ -57,7 +57,7 @@ def HexShow(i_string):
 		hhex = '%02X' % (hvol)
 		hex_string += hhex + ' '
 #	print('ReceiveBytes: %i_string' % (hex_string))
-	print(hex_string,'	total:',hLen)
+	print(S_name,hex_string,'	total:',hLen)
 
 #crc16 calculate
 def cal_crc16(puchMsg,crc_count):
@@ -72,7 +72,7 @@ def cal_crc16(puchMsg,crc_count):
 				CRC ^= xorCRC
 	return CRC
 ###++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++###
-Comnumb = 'com5'
+Comnumb = 'com3'
 #Comnumb=input('输入串口号(如com9):')
 s = serial.Serial(Comnumb,115200)
 if s._port is None:
@@ -104,13 +104,15 @@ else:
 			#wait ack of handshake
 		while s.inWaiting() == 0:#wait ack
 			pass
-		time.sleep(0.004)
+		time.sleep(0.008)
 		ack_numb = s.inWaiting()#read the numb of bytes received
 		rx_string = s.read(ack_numb)
 		#print(type(rx_string))
-		HexShow(rx_string)
+		print("\n")
+
+		HexShow( "UartRxMsg", rx_string)
 		if (ack_numb >= 14) and ((rx_string[ack_numb-1]*256 + rx_string[ack_numb-2]) == cal_crc16(rx_string,ack_numb-2)):# 2 = (SN + W_CMD + SIZE -CRC16)
-			print("RECEIVED MSG SUCCESS !")
+			print("CHECK MSG SUCCESS !")
 
 			atrrCmd = struct.unpack('<H',rx_string[21:23])# atrrCmd is tuple
 			#print(atrrCmd)
@@ -130,14 +132,18 @@ else:
 			tx_forme =   struct.pack('<BHHIIB',status,Manufacture, ImageType, FileVersion, FileOffset, len(ImageDtaBytes)) + ImageDtaBytes # H 2bytes,B 1byte,I 4bytes
 
 			tx_string = PackSendData(tx_forme, EndPoint, ClusterOTA, HaHeader,CmdImageBlockRsp) # add startCode lenth and crc
-			print("ImageBlockRsp:")
-			#HexShow(tx_string)
+
+			HexShow("ImageBlockRsp:", tx_string)
+			#time.sleep(0.1)
 			s.write(tx_string)
 			continue
 		if(atrrCmd[0] == 0x00F1):# NextImageReq
 			b_offset = 29 # data offset
 			devFileVersion = struct.unpack('<I',rx_string[b_offset:b_offset+4])
-			print("devFileVersion= %X"%devFileVersion)
+			IEEE64 = rx_string[7:16]
+			HexShow("devIEEE64 =", IEEE64)
+			print("devFileVersion= %X"%devFileVersion)# Device FileVersion now
+
 			if(devFileVersion[0] >= LocalFileVersion):#judge the FileVersion
 				print("there is no higher version !!!")
 				sendmsg = (b'\x01') # status of NextImageRsp
@@ -147,16 +153,28 @@ else:
 
 			sendmsg = PackSendData(sendmsg,  EndPoint, ClusterOTA, HaHeader,CmdQueryNextImageRsp)
 			s.flushOutput()
-			s.write(sendmsg)
+			HexShow("NextImageRsp",sendmsg)
+			s.write( sendmsg)
+			print(time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(time.time())))
+			StartTime = time.localtime(time.time())
+			StartTimeSeconds = time.time()
+
 			continue
 		if(atrrCmd[0] == 0x00F6):# UpgradeEndRsp
+			if(rx_string[24] is not 0x00):
+				print("UpgradeEndRep: Failed")
+				continue
 			sendmsg = (b'\x78\x56\x34\x12')
 			NowTime = 0  #
 			UpgradTime = 1 ;#about 1 minute(UpgradeTime - NowTime) after ,the device will restart and upgrade
 			sendmsg = sendmsg + struct.pack('<III',LocalFileVersion, NowTime , UpgradTime)
 			sendmsg = PackSendData(sendmsg, EndPoint, ClusterOTA, HaHeader, CmdUpgradeEndRsp)
-			print("UpgradeEndRsp:")
+			HexShow("UpgradeEndRsp:",sendmsg)
 			s.write(sendmsg)
+			print("\nUpgrade Ending")
+			print(time.strftime('start %Y-%m-%d %H:%M:%S',StartTime))
+			print(time.strftime('end %Y-%m-%d %H:%M:%S',time.localtime()))#how long is the duration
+			print("This Upgrade Duration is %.2f Seconds"%(time.time() - StartTimeSeconds))
 			break
 
 print('\nLoading success and jump to application...')
