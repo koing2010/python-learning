@@ -50,7 +50,7 @@ class hidHelper(object):
         接收数据回调函数
         '''
 		print("alive")
-		print([hex(item).upper() for item in data[1:]])
+		print([hex(item).upper() for item in data[0:]])
 
 
 	def write(self, send_list):
@@ -71,9 +71,9 @@ if __name__ == '__main__':
 	myhid.setcallback()
 	while myhid.alive:
 		print("hid alive")
-		send_list = [0x00 for i in range(64)]
-		#myhid.write(send_list)
-		myhid.read(send_list)
-		print(send_list)
-		time.sleep(0.5)
+		send_list = [0x00 for i in range(9)]
+		for i in range(9):
+			send_list[i] = i
+		myhid.write(send_list)
+		time.sleep(5)
 	myhid.stop()

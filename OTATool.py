@@ -6,7 +6,10 @@ import os
 import struct
 import sys
 # define local file version
-LocalFileVersion = 0x0000ABD2
+LocalFileVersion = 0x17061200
+LocalManufacture = 0x485A #x5A\x48\x01\xD0
+LocalImageType = 0xD001
+
 # define every command of
 Send_Lenth = 0x0001
 Send_SN = 1
@@ -81,7 +84,7 @@ if s._port is None:
 		pass
 
 string = ''
-s.setTimeout(2)
+#s.setTimeout(2)
 thrd = threading.Thread(target=MyTxThread,name='koing2010')
 thrd.start()# start threading
 
@@ -89,7 +92,7 @@ thrd.start()# start threading
 #s.write(b'\x5A\xA5\x10\x01\x01\x00\x00\x00\x02\x02\x01\xA5\x5A')
 time.sleep(0.2)
 path_str = os.path.abspath('.')
-path_str += '/zigbeebin/5678-1234-0000ABD2.zigbee'
+path_str += '/zigbeebin/485A-D001-17061200.zigbee'
 file_t = open(path_str,'rb')#'rb' read bin format
 bin_size = os.path.getsize(path_str);#get size of this
 if bin_size > (256-20)*1024: # 256K(total flash) -20K(boot sector)
@@ -131,7 +134,7 @@ else:
 			status = 0
 			tx_forme =   struct.pack('<BHHIIB',status,Manufacture, ImageType, FileVersion, FileOffset, len(ImageDtaBytes)) + ImageDtaBytes # H 2bytes,B 1byte,I 4bytes
 
-			tx_string = PackSendData(tx_forme, EndPoint, ClusterOTA, HaHeader,CmdImageBlockRsp) # add startCode lenth and crc
+			tx_string = PackSendData(tx_forme, EndPoint, ClusterOTA, HaHeader,CmdImageBlockRsp) # add startCode  lenth and crc
 
 			HexShow("ImageBlockRsp:", tx_string)
 			#time.sleep(0.1)
@@ -148,8 +151,8 @@ else:
 				print("there is no higher version !!!")
 				sendmsg = (b'\x01') # status of NextImageRsp
 			else:
-				sendmsg =(b'\x00\x78\x56\x34\x12')# Mannufacture and ImageType
-				sendmsg = sendmsg + struct.pack('<I', LocalFileVersion) + struct.pack('<I', bin_size)
+				sendmsg =(b'\x00')# Mannufacture and ImageType
+				sendmsg = sendmsg + struct.pack('<HHI', LocalManufacture, LocalImageType, LocalFileVersion) + struct.pack('<I', bin_size)
 
 			sendmsg = PackSendData(sendmsg,  EndPoint, ClusterOTA, HaHeader,CmdQueryNextImageRsp)
 			s.flushOutput()
@@ -164,10 +167,9 @@ else:
 			if(rx_string[24] is not 0x00):
 				print("UpgradeEndRep: Failed")
 				continue
-			sendmsg = (b'\x78\x56\x34\x12')
 			NowTime = 0  #
 			UpgradTime = 1 ;#about 1 minute(UpgradeTime - NowTime) after ,the device will restart and upgrade
-			sendmsg = sendmsg + struct.pack('<III',LocalFileVersion, NowTime , UpgradTime)
+			sendmsg = struct.pack('<HHIII',LocalManufacture, LocalImageType, LocalFileVersion, NowTime , UpgradTime)
 			sendmsg = PackSendData(sendmsg, EndPoint, ClusterOTA, HaHeader, CmdUpgradeEndRsp)
 			HexShow("UpgradeEndRsp:",sendmsg)
 			s.write(sendmsg)
