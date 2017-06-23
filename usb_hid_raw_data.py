@@ -11,11 +11,17 @@ from msvcrt import kbhit
 import pywinusb.hid as hid
 
 class UserDevice:
-    vendor_id = 0x07AD
+    vendor_id = 0x07DA
     product_id = 0x2010
 
 def sample_handler(data):
-    print("Raw data: 0X{0}".format(data))
+    #print(type(data))
+    if(data[1] == 0x85):
+        temperature = data[3]+data[4]*256
+        humidity =  data[5]+data[6]*256
+        print("tempertature = %.2f "%(temperature/100),"humidity = %%%.2f"%(humidity/100))
+    else:
+        print("Raw data: 0X{0}".format(data))
 def sample_write(device, send_list):
     report = device.find_output_reports()
     print(report)

@@ -13,7 +13,7 @@ def calcFCS(pMsg):
 def DataRequest(SendData,):
 	# SOF  +  General format frame + FCS
 	#  1byte  + 3-253bytes  +  1bytes
-	SendData = struct.pack("<B", 0xFE) + SendData + calcFCS(SendData)#XOR the general format frame fields
+	SendData = struct.pack("<B", 0xFE) + SendData + struct.pack("<B",calcFCS(SendData))#XOR the general format frame fields
 	s.write(SendData)
 
 
