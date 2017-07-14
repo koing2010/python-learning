@@ -58,7 +58,7 @@ def cal_crc16(puchMsg,crc_count):
 	return CRC
 ###++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++###
 	
-Comnumb = 'com6'
+Comnumb = 'com3'
 #Comnumb=input('输入串口号(如com9):')
 s = serial.Serial(Comnumb,115200)
 string = ' '

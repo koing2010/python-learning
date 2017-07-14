@@ -6,9 +6,9 @@ import os
 import struct
 import sys
 # define local file version
-LocalFileVersion = 0x17061200
-LocalManufacture = 0x485A #x5A\x48\x01\xD0
-LocalImageType = 0xD001
+LocalFileVersion = 0x17071201
+LocalManufacture = 0x585A #x5A\x48\x01\xD0
+LocalImageType = 0x1003
 
 # define every command of
 Send_Lenth = 0x0001
@@ -92,7 +92,7 @@ thrd.start()# start threading
 #s.write(b'\x5A\xA5\x10\x01\x01\x00\x00\x00\x02\x02\x01\xA5\x5A')
 time.sleep(0.2)
 path_str = os.path.abspath('.')
-path_str += '/zigbeebin/485A-D001-17061200.zigbee'
+path_str += '/zigbeebin/585A-1003-17071200.zigbee'
 file_t = open(path_str,'rb')#'rb' read bin format
 bin_size = os.path.getsize(path_str);#get size of this
 if bin_size > (256-20)*1024: # 256K(total flash) -20K(boot sector)
@@ -177,7 +177,7 @@ else:
 			print(time.strftime('start %Y-%m-%d %H:%M:%S',StartTime))
 			print(time.strftime('end %Y-%m-%d %H:%M:%S',time.localtime()))#how long is the duration
 			print("This Upgrade Duration is %.2f Seconds"%(time.time() - StartTimeSeconds))
-			break
+			continue
 
 print('\nLoading success and jump to application...')
 print('bin file has been closed !')
