@@ -5,8 +5,9 @@ import threading
 import os
 import struct
 import sys
+import queue
 # define local file version
-LocalFileVersion = 0x17071201
+LocalFileVersion = 0x17071303
 LocalManufacture = 0x585A #x5A\x48\x01\xD0
 LocalImageType = 0x1003
 
@@ -44,6 +45,61 @@ def MyTxThread():
 	time.sleep(20)
 	print('Waiting!')
 
+class myThread (threading.Thread):
+    def __init__(self, threadID, name, q):
+        threading.Thread.__init__(self)
+        self.threadID = threadID
+        self.name = name
+        self.q = q
+    def run(self):
+        print("Starting " + self.name)
+        process_data(self.name, self.q)
+        print("Exiting " + self.name)
+
+
+
+#usart rx data
+def process_data(threadName, q):
+	restore = (b'')
+	rxdata  = (b'')
+	while (1):
+		#wait ack of handshake
+		while s.inWaiting() == 0:#wait ack
+			pass
+		time.sleep(0.008)
+		ack_numb = s.inWaiting()#read the numb of bytes received
+		rxdata =rxdata + s.read(ack_numb)
+		while (1):
+			if(rxdata[0] is 0x5B) and (rxdata[1] is 0xB5):
+				templen = len(rxdata)
+				if templen >= 4:
+					frame_lenth =  rxdata[2] + rxdata[3]*256
+					if frame_lenth <= templen:
+						workQueue.put(rxdata[0:frame_lenth])
+						#print("more")
+						rxdata = rxdata[frame_lenth:templen]
+					else:
+						time.sleep(0.005)
+						ack_numb = s.inWaiting()  # read the numb of bytes received
+						if(frame_lenth - templen) <= ack_numb:
+							rxdata = rxdata + s.read(frame_lenth - templen)
+							workQueue.put(rxdata)
+							rxdata = (b'')
+						else:#timeout
+							rxdata = (b'')
+					break
+			else:
+				for i in range(len(rxdata)):
+					if rxdata[i] is 0xFE:
+						rxdata = rxdata[i:len(rxdata)]
+						break #break the for loop
+					else:
+						continue
+				rxdata = (b'')
+				break;#while
+	#	queueLock.acquire()
+	#	workQueue.put(rxdata)
+    #    queueLock.release()
 
 def PackSendData( SendMsg, endpoint, cluster, headControl, Cmd):
 	SendMsg = struct.pack('<BBB', Send_SN, TyHeader, ProtocolType) + IEEE64 + struct.pack('<BHBB', endpoint, cluster, headControl, Cmd )+SendMsg
@@ -84,15 +140,18 @@ if s._port is None:
 		pass
 
 string = ''
-#s.setTimeout(2)
-thrd = threading.Thread(target=MyTxThread,name='koing2010')
+
+queueLock = threading.Lock()
+workQueue = queue.Queue(maxsize = 10)
+
+thrd = myThread(1,'koing2010',workQueue)
 thrd.start()# start threading
 
 #主体
 #s.write(b'\x5A\xA5\x10\x01\x01\x00\x00\x00\x02\x02\x01\xA5\x5A')
 time.sleep(0.2)
 path_str = os.path.abspath('.')
-path_str += '/zigbeebin/585A-1003-17071200.zigbee'
+path_str += '/zigbeebin/585A-1003-17071303.zigbee'
 file_t = open(path_str,'rb')#'rb' read bin format
 bin_size = os.path.getsize(path_str);#get size of this
 if bin_size > (256-20)*1024: # 256K(total flash) -20K(boot sector)
@@ -104,24 +163,24 @@ else:
 #Description:       PayloadLenth = n_bytes + 2_bytes_CRC16
 
 	while (1) :
-			#wait ack of handshake
-		while s.inWaiting() == 0:#wait ack
-			pass
-		time.sleep(0.008)
-		ack_numb = s.inWaiting()#read the numb of bytes received
-		rx_string = s.read(ack_numb)
+
 		#print(type(rx_string))
+		if not workQueue.empty():
+			rx_string = workQueue.get()
+		else:
+			continue
+		time.sleep(0.03)
 		print("\n")
 
-		HexShow( "UartRxMsg", rx_string)
-		if (ack_numb >= 14) and ((rx_string[ack_numb-1]*256 + rx_string[ack_numb-2]) == cal_crc16(rx_string,ack_numb-2)):# 2 = (SN + W_CMD + SIZE -CRC16)
+		HexShow( "UartRxMsg",rx_string )
+		if (len(rx_string) >= 14) and ((rx_string[len(rx_string)-1]*256 + rx_string[len(rx_string)-2]) == cal_crc16(rx_string,len(rx_string)-2)):# 2 = (SN + W_CMD + SIZE -CRC16)
 			print("CHECK MSG SUCCESS !")
-
+			IEEE64 = rx_string[7:16]
 			atrrCmd = struct.unpack('<H',rx_string[21:23])# atrrCmd is tuple
 			#print(atrrCmd)
 		else:
-			print("handshake FAILED	 ! ack_numb = %d"%ack_numb)
-			HexShow(rx_string)
+			print("handshake FAILED	 ! ack_numb = %d"%len(rx_string))
+			HexShow("erro",rx_string)
 			s.flushInput()
 			continue
 		if(atrrCmd[0] == 0x00F3):# NextBlockReq
@@ -143,7 +202,6 @@ else:
 		if(atrrCmd[0] == 0x00F1):# NextImageReq
 			b_offset = 29 # data offset
 			devFileVersion = struct.unpack('<I',rx_string[b_offset:b_offset+4])
-			IEEE64 = rx_string[7:16]
 			HexShow("devIEEE64 =", IEEE64)
 			print("devFileVersion= %X"%devFileVersion)# Device FileVersion now
 
