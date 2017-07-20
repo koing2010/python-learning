@@ -51,6 +51,26 @@ def ProcessRxData( msg ):
 			print("CMD0_TYPE_SREQ")
 		if msg[2]>>5 & 0x07 is CMD0_TYPE_AREQ:
 			print("CMD0_TYPE_AREQ")
+			if msg[3] is 0x81:
+				print("AF_INCOMING_MESSAGE")
+				if msg[1] < 9:
+					print("leth erro")
+				else:
+					print("GroupID:%04X "%(msg[4]+msg[5]*256), "ClusterID:%04X "%(msg[6]+msg[7]*256), \
+						 "SrcAddr: %04X "%(msg[8]+msg[9]*256), "SrcEndpoint：%02X "%msg[10], "DestEndpoint：%02X "%msg[11],\
+						"WasBroadcast: %02X " % msg[12], "LinkQuality: %02X " % msg[13], "SecurityUse: %02X " % msg[14], \
+						"Timestamp: %08X " % struct.unpack("<I",msg[15:19]),"TransSeqNumber: %02X " % msg[19], "len: %02X " % msg[20])
+					HexShow("data:",msg[21:msg[20]+21])#data zcl frame
+
+			if msg[3] is 0xFF:#ZDO message incoming
+				print("ZDO_ MSG_CB_INCOMING")
+				if msg[1] < 9:
+					print("ZDO_MSG Data lenth erro!!!")
+				else:
+					print("SrcAddr:%04X "%(msg[4]+msg[5]*256),"WasBroadcast: %02X "%msg[6], "ClusterID: %04X "%\
+					  (msg[8]*256+msg[7]), "SecurityUse: %02X "%msg[9], "SqeNum: %02X "%msg[10], "MacDstAddr:\
+					   %02X"%(msg[11]+msg[12]*256))
+					HexShow("Data:",msg[13:msg[1]+3])
 		if msg[2]>>5 & 0x07 is CMD0_TYPE_SRSP:
 			print("CMD0_TYPE_SRSP")
 			####### Cmo0 judge ##############
@@ -130,6 +150,12 @@ def DataRequest(SendData):
 	SendData = struct.pack("<B", 0xFE) + SendData + struct.pack("<B",calcFCS(SendData))#XOR the general format frame fields
 	HexShow("DataRequest:",SendData)
 	s.write(SendData)
+#call this fucntion ro register of an imcoming over the air zdo message probably a response message but requests can also be received
+def ZDO_RegisterForZDOMsgCB(ClsusterID):
+	DataRequest(struct.pack("<BBBH",0x02,0x25,0x3E,ClsusterID))
+
+def ZDO_RemoveForZDOMsgCB(ClusterID):
+	DataRequest(struct.pack("<BBBH"), 0x02,0x25,0x3F,ClusterID)
 
 # write a configuration parameter to the CC2530-ZNP device
 def zb_write_configratiion( ConfigId, lenth, Value):
@@ -147,7 +173,7 @@ def AF_RegisterAppEndpointDescription(EndPoint, AppProfId, AppdeviceId, AppdevVe
 
 # AF_DATA_REQUEST
 def AF_DataRequest(DstAddr, DestEndpoint, SrcEndpiont, ClusterID, TransID, Options, Radius, DataLen, pData):
-	msg = struct.pack("<H",DstAddr) + truct.pack("<B",DestEndpoint) + struct.pack("<B", SrcEndpiont)  + \
+	msg = struct.pack("<H",DstAddr) + struct.pack("<B",DestEndpoint) + struct.pack("<B", SrcEndpiont)  + \
 		  struct.pack("<H", ClusterID) + struct.pack("<B" ,TransID) + struct.pack("<B" ,Options) + \
 		  struct.pack("<B",Radius) + struct.pack("<B", DataLen) + pData
 	DataRequest(  struct.pack("<B",len(msg)) + struct.pack("<BB",0x24,0x01) + msg   )# cmd0= 0x24 + Cmd1=0x01
@@ -156,7 +182,6 @@ def MyTxThread():
 	print("rx thread start")
 	while(1):
 		while s.inWaiting() == 0:
-			time.sleep(0.1)
 			pass
 		time.sleep(0.01)
 		n = s.inWaiting()
@@ -189,29 +214,40 @@ thrd = threading.Thread(target=MyTxThread,name='koing2010')
 thrd.start()
 
 	#print(string)
-DataRequest (sys_osal_nv_read_header + struct.pack("<HB", 0x0F01, 0x00) )
-time.sleep(0.5)
-DataRequest( sys_set_tx_power + struct.pack("<B", 0x05) )#set tx power 5dbm
-time.sleep(0.5)
-DataRequest( sys_zdiags_restore_stats_nv)
-time.sleep(0.5)
+#DataRequest (sys_osal_nv_read_header + struct.pack("<HB", 0x0F01, 0x00) )
+#time.sleep(0.5)
+#DataRequest( sys_set_tx_power + struct.pack("<B", 0x05) )#set tx power 5dbm
+#time.sleep(0.5)
+#DataRequest( sys_zdiags_restore_stats_nv)
+#time.sleep(0.5)
 #zb_write_configratiion(0x83, 0x02, struct.pack("<H", 0x6789))#set panid
-time.sleep(0.5)
+#time.sleep(0.5)
 #zb_write_configratiion(0x84, 0x04, struct.pack("<I", 0x04000000))#set chanlist
-time.sleep(1)
+#time.sleep(1)
 #DataRequest( ZB_READ_CONFIGURATION + struct.pack("<B", 0x03) )
-time.sleep(0.5)
+#time.sleep(0.5)
 #DataRequest( ZB_READ_CONFIGURATION + struct.pack("<B", 0x87) )
-time.sleep(0.5)
+#time.sleep(0.5)
 DataRequest( ZB_READ_CONFIGURATION + struct.pack("<B", 0x84) )
-time.sleep(0.5)
+time.sleep(0.1)
 DataRequest( ZB_READ_CONFIGURATION + struct.pack("<B", 0x83) )
 #time.sleep(0.5)
 DataRequest(ZB_START_REQUEST)
-time.sleep(0.5)
+time.sleep(0.1)
 AF_RegisterAppEndpointDescription(0x01, 0x0104, 0x0000, 0x00, 0x00, 1,struct.pack("<H", 0x0006), 1,struct.pack("<H", 0x0006))
-time.sleep(0.5)
-DataRequest( ZB_PERMIT_JOINING_REQUEST +  struct.pack("<HB", 0xFFFC, 0x20) )
-
+time.sleep(0.1)
+ZDO_RegisterForZDOMsgCB(0x0006)# mesh req
+time.sleep(0.1)
+DataRequest( ZB_PERMIT_JOINING_REQUEST +  struct.pack("<HB", 0xFFFC, 0x0) )
+status = 0x01
+while 1:
+	if status is 1:
+		status = 0x00
+		zcl_msg = struct.pack("<BBB",0x01,0x00,0x01)
+	else:
+		status = 0x01
+		zcl_msg = struct.pack("<BBB", 0x01, 0x00, 0x00)
+	AF_DataRequest(0x119F,1,1,0x0006,1,0x30,30,len(zcl_msg),zcl_msg)
+	time.sleep(4)
 thrd.join()
 s.close()

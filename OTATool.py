@@ -53,14 +53,24 @@ class myThread (threading.Thread):
         self.q = q
     def run(self):
         print("Starting " + self.name)
-        process_data(self.name, self.q)
+        if self.threadID is 1:
+           process_data(self.name, self.q)
+        else:
+           txdata(self.name, self.q)
         print("Exiting " + self.name)
 
-
-
+# usart tx data
+def txdata(threadName, q):
+	print(threadName + "start")
+	while (1):
+		while not sendQueue.empty():
+			txda = sendQueue.get()
+			s.write(txda)
+			#HexShow("txthread:",txda)
+			time.sleep(0.05)
 #usart rx data
 def process_data(threadName, q):
-	restore = (b'')
+	print(threadName + "start")
 	rxdata  = (b'')
 	while (1):
 		#wait ack of handshake
@@ -143,9 +153,12 @@ string = ''
 
 queueLock = threading.Lock()
 workQueue = queue.Queue(maxsize = 10)
+sendQueue = queue.Queue(maxsize = 10)
 
-thrd = myThread(1,'koing2010',workQueue)
-thrd.start()# start threading
+Rxthrd = myThread(1,'uartRxThread',workQueue)
+Rxthrd.start()# start threading
+Txthrd = myThread(2,'uartTxThread',sendQueue)
+Txthrd.start()# start threading
 
 #主体
 #s.write(b'\x5A\xA5\x10\x01\x01\x00\x00\x00\x02\x02\x01\xA5\x5A')
@@ -169,7 +182,6 @@ else:
 			rx_string = workQueue.get()
 		else:
 			continue
-		time.sleep(0.03)
 		print("\n")
 
 		HexShow( "UartRxMsg",rx_string )
@@ -197,7 +209,8 @@ else:
 
 			HexShow("ImageBlockRsp:", tx_string)
 			#time.sleep(0.1)
-			s.write(tx_string)
+			#s.write(tx_string)
+			sendQueue.put(tx_string)
 			continue
 		if(atrrCmd[0] == 0x00F1):# NextImageReq
 			b_offset = 29 # data offset
@@ -205,7 +218,7 @@ else:
 			HexShow("devIEEE64 =", IEEE64)
 			print("devFileVersion= %X"%devFileVersion)# Device FileVersion now
 
-			if(devFileVersion[0] >= LocalFileVersion):#judge the FileVersion
+			if(devFileVersion[0] > LocalFileVersion):#judge the FileVersion
 				print("there is no higher version !!!")
 				sendmsg = (b'\x01') # status of NextImageRsp
 			else:
@@ -215,7 +228,8 @@ else:
 			sendmsg = PackSendData(sendmsg,  EndPoint, ClusterOTA, HaHeader,CmdQueryNextImageRsp)
 			s.flushOutput()
 			HexShow("NextImageRsp",sendmsg)
-			s.write( sendmsg)
+			#s.write( sendmsg)
+			sendQueue.put(sendmsg)
 			print(time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(time.time())))
 			StartTime = time.localtime(time.time())
 			StartTimeSeconds = time.time()
@@ -230,7 +244,8 @@ else:
 			sendmsg = struct.pack('<HHIII',LocalManufacture, LocalImageType, LocalFileVersion, NowTime , UpgradTime)
 			sendmsg = PackSendData(sendmsg, EndPoint, ClusterOTA, HaHeader, CmdUpgradeEndRsp)
 			HexShow("UpgradeEndRsp:",sendmsg)
-			s.write(sendmsg)
+			#s.write(sendmsg)
+			sendQueue.put(sendmsg)
 			print("\nUpgrade Ending")
 			print(time.strftime('start %Y-%m-%d %H:%M:%S',StartTime))
 			print(time.strftime('end %Y-%m-%d %H:%M:%S',time.localtime()))#how long is the duration
@@ -244,4 +259,5 @@ file_t.close()# close bin file
 
 s.close()
 input('Press Enter Key Exit~')
-thrd.join()
+Rxthrd.join()
+Txthrd.join()
