@@ -3,6 +3,9 @@ import time
 import threading
 import struct
 
+
+SUCCESS = 0
+FALURE = 1
 #For AF
 AF_DEFAULT_RADIUS = 0x1E
 
@@ -35,6 +38,26 @@ ZB_START_REQUEST = (b'\x00\x26\x00')
 ZB_PERMIT_JOINING_REQUEST = (b'\x03\x26\x08')#Destination + Timeout
 ZB_ALLOW_BIND = (b'\x01\x26\x02')#TimeOut
 
+# called when this node receives a zdo/ zdp response
+ZDO_RESPONSE_BIT = 0x8000
+Active_EP_req = 0x0006
+Match_Desc_req = 0x0006
+Match_Desc_rsp = Match_Desc_req | ZDO_RESPONSE_BIT
+Active_EP_rsp =  Active_EP_req | ZDO_RESPONSE_BIT
+
+Device_annce = 0x00013
+
+def ProcessZDOmsgs(SrcAddr, WasBroadcast, ClusterID, SecurityUse, SeqNum, pData):
+	if ClusterID is Match_Desc_req:
+		print("Match_Desc_req")
+		MatchList = (b'\x01')
+		ZDO_Mactch_Desc_Rsp(SrcAddr, SeqNum, SUCCESS, 0xFFFD, 1, MatchList)#(DesAddr, SeqNum, Status, NwkAddr, MatchLength, MatchList):
+
+	if ClusterID is Device_annce:
+		print("Device_annce")
+		HexShow("nwkAddr",pData[0:2])
+		HexShow("extAddr",pData[2:])
+
 #def
 def ProcessRxData( msg ):
 	if len(msg) < msg[1]+4:
@@ -51,6 +74,12 @@ def ProcessRxData( msg ):
 			print("CMD0_TYPE_SREQ")
 		if msg[2]>>5 & 0x07 is CMD0_TYPE_AREQ:
 			print("CMD0_TYPE_AREQ")
+			if msg[3] is 0x80:
+				print("AF_DATA_CONFIRM")
+				if msg[1] is 0x03:
+					print("Status:%02X "%msg[4],"Endpoint:%02X"%msg[5], "TranID:%02X"%msg[6])
+				else:
+					print("leth erro")
 			if msg[3] is 0x81:
 				print("AF_INCOMING_MESSAGE")
 				if msg[1] < 9:
@@ -61,16 +90,16 @@ def ProcessRxData( msg ):
 						"WasBroadcast: %02X " % msg[12], "LinkQuality: %02X " % msg[13], "SecurityUse: %02X " % msg[14], \
 						"Timestamp: %08X " % struct.unpack("<I",msg[15:19]),"TransSeqNumber: %02X " % msg[19], "len: %02X " % msg[20])
 					HexShow("data:",msg[21:msg[20]+21])#data zcl frame
-
 			if msg[3] is 0xFF:#ZDO message incoming
 				print("ZDO_ MSG_CB_INCOMING")
 				if msg[1] < 9:
 					print("ZDO_MSG Data lenth erro!!!")
 				else:
 					print("SrcAddr:%04X "%(msg[4]+msg[5]*256),"WasBroadcast: %02X "%msg[6], "ClusterID: %04X "%\
-					  (msg[8]*256+msg[7]), "SecurityUse: %02X "%msg[9], "SqeNum: %02X "%msg[10], "MacDstAddr:\
-					   %02X"%(msg[11]+msg[12]*256))
+					(msg[8]*256+msg[7]), "SecurityUse: %02X "%msg[9], "SqeNum: %02X "%msg[10], "MacDstAddr: %02X"%(msg[11]+msg[12]*256))
 					HexShow("Data:",msg[13:msg[1]+3])
+					ProcessZDOmsgs((msg[4]+msg[5]*256),msg[6], (msg[8]*256+msg[7]), msg[9],msg[10],msg[13:msg[1]+3])  # (SrcAddr, WasBroadcast, ClusterID, SecurityUse, SeqNum, pData):
+
 		if msg[2]>>5 & 0x07 is CMD0_TYPE_SRSP:
 			print("CMD0_TYPE_SRSP")
 			####### Cmo0 judge ##############
@@ -157,6 +186,19 @@ def ZDO_RegisterForZDOMsgCB(ClsusterID):
 def ZDO_RemoveForZDOMsgCB(ClusterID):
 	DataRequest(struct.pack("<BBBH"), 0x02,0x25,0x3F,ClusterID)
 
+def ZDO_Send_Data(DesAddr, Transeq, Cmd, lenth, zod_msg):
+	msg = struct.pack("<BBHBHB", 0x45, 0x28, DesAddr, Transeq, Cmd, lenth) + zod_msg
+	DataRequest(struct.pack("<B", len(msg) - 2) + msg)
+
+#This callback message is in response to the ZDO Match Descriptor Request
+def ZDO_Mactch_Desc_Rsp(DesAddr, SeqNum, Status, NwkAddr, MatchLength, MatchList):
+	msg = struct.pack("<BHB", Status,NwkAddr,MatchLength)+ MatchList
+	ZDO_Send_Data(DesAddr, SeqNum, Match_Desc_rsp, len(msg), msg)
+
+def ZDP_EPRsp(DesAddr, SeqNum, Status, NwkAddr, lenth, EPList):
+	msg = struct.pack("<BHB", Status,NwkAddr,lenth)+ EPList
+	ZDO_Send_Data(DesAddr, SeqNum, Active_EP_rsp, len(msg), msg)
+
 # write a configuration parameter to the CC2530-ZNP device
 def zb_write_configratiion( ConfigId, lenth, Value):
 	msg = struct.pack("<BBBB",0x26,0x05, ConfigId, lenth) + Value
@@ -220,14 +262,21 @@ thrd.start()
 #time.sleep(0.5)
 #DataRequest( sys_zdiags_restore_stats_nv)
 #time.sleep(0.5)
-#zb_write_configratiion(0x83, 0x02, struct.pack("<H", 0x6789))#set panid
+"""
+zb_write_configratiion(0x83, 0x02, struct.pack("<H", 0x6789))#set panid
 #time.sleep(0.5)
-#zb_write_configratiion(0x84, 0x04, struct.pack("<I", 0x04000000))#set chanlist
+#time.sleep(0.5)
+#zb_write_configratiion(0x03, 0x01, struct.pack("<B", 0x02))#reset factry
+zb_write_configratiion(0x8F, 0x01, struct.pack("<B", 0x01))#set clear
+time.sleep(0.1)
+zb_write_configratiion(0x84, 0x04, struct.pack("<I", 0x04000000))#set chanlist
+"""
 #time.sleep(1)
 #DataRequest( ZB_READ_CONFIGURATION + struct.pack("<B", 0x03) )
 #time.sleep(0.5)
 #DataRequest( ZB_READ_CONFIGURATION + struct.pack("<B", 0x87) )
 #time.sleep(0.5)
+
 DataRequest( ZB_READ_CONFIGURATION + struct.pack("<B", 0x84) )
 time.sleep(0.1)
 DataRequest( ZB_READ_CONFIGURATION + struct.pack("<B", 0x83) )
@@ -236,9 +285,11 @@ DataRequest(ZB_START_REQUEST)
 time.sleep(0.1)
 AF_RegisterAppEndpointDescription(0x01, 0x0104, 0x0000, 0x00, 0x00, 1,struct.pack("<H", 0x0006), 1,struct.pack("<H", 0x0006))
 time.sleep(0.1)
-ZDO_RegisterForZDOMsgCB(0x0006)# mesh req
+ZDO_RegisterForZDOMsgCB(Match_Desc_req)# mesh req
+ZDO_RegisterForZDOMsgCB(Device_annce)#
 time.sleep(0.1)
 DataRequest( ZB_PERMIT_JOINING_REQUEST +  struct.pack("<HB", 0xFFFC, 0x0) )
+"""
 status = 0x01
 while 1:
 	if status is 1:
@@ -249,5 +300,6 @@ while 1:
 		zcl_msg = struct.pack("<BBB", 0x01, 0x00, 0x00)
 	AF_DataRequest(0x119F,1,1,0x0006,1,0x30,30,len(zcl_msg),zcl_msg)
 	time.sleep(4)
+"""
 thrd.join()
 s.close()
