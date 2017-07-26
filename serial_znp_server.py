@@ -6,6 +6,15 @@ import struct
 
 SUCCESS = 0
 FALURE = 1
+#OPTION
+AF_WILDCARD_PROFILEID         =     0x02   # Will force the message to use Wildcard ProfileID
+AF_ACK_REQUEST                =     0x10   # Will force APS to callback to preprocess before calling NWK layer
+AF_SUPRESS_ROUTE_DISC_NETWORK =     0x20   # Supress Route Discovery for intermediate routes
+                                           # (route discovery preformed for initiating device)
+AF_EN_SECURITY                =    0x40    # APS security
+AF_SKIP_ROUTING               =    0x80    #ship routing
+
+
 #For AF
 AF_DEFAULT_RADIUS = 0x1E
 
@@ -40,12 +49,12 @@ ZB_ALLOW_BIND = (b'\x01\x26\x02')#TimeOut
 
 # called when this node receives a zdo/ zdp response
 ZDO_RESPONSE_BIT = 0x8000
-Active_EP_req = 0x0006
+Active_EP_req = 0x0005
 Match_Desc_req = 0x0006
 Match_Desc_rsp = Match_Desc_req | ZDO_RESPONSE_BIT
-Active_EP_rsp =  Active_EP_req | ZDO_RESPONSE_BIT
+Active_EP_rsp =  (Active_EP_req | ZDO_RESPONSE_BIT)
 
-Device_annce = 0x00013
+Device_annce = 0x0013
 
 def ProcessZDOmsgs(SrcAddr, WasBroadcast, ClusterID, SecurityUse, SeqNum, pData):
 	if ClusterID is Match_Desc_req:
@@ -57,6 +66,18 @@ def ProcessZDOmsgs(SrcAddr, WasBroadcast, ClusterID, SecurityUse, SeqNum, pData)
 		print("Device_annce")
 		HexShow("nwkAddr",pData[0:2])
 		HexShow("extAddr",pData[2:])
+		dstAddr =struct.unpack( "<H", pData[0:2])
+		ZDP_ActiveEPReq(dstAddr[0], SeqNum,dstAddr[0])
+	if ClusterID == Active_EP_rsp:
+		print("Active_EP_rsp ")
+		if (pData[0] is 0):
+			print("\rSUCCESS ", "NwkAddrOfInterest: %04X"%(pData[1]+pData[2]*256))
+			minEndpoint = 1;
+			for i in range(pData[3]):
+				if pData[3+i] < minEndpoint:
+					minEndpoint = pData[3+i]
+			zcl_msg = struct.pack("<BBBHH", 0x00, SeqNum + 1, 0x00, 0x0004,0x0005)
+			AF_DataRequest(SrcAddr,minEndpoint,1,0x0000,1,AF_SUPRESS_ROUTE_DISC_NETWORK|AF_EN_SECURITY,30,len(zcl_msg),zcl_msg)
 
 #def
 def ProcessRxData( msg ):
@@ -97,8 +118,8 @@ def ProcessRxData( msg ):
 				else:
 					print("SrcAddr:%04X "%(msg[4]+msg[5]*256),"WasBroadcast: %02X "%msg[6], "ClusterID: %04X "%\
 					(msg[8]*256+msg[7]), "SecurityUse: %02X "%msg[9], "SqeNum: %02X "%msg[10], "MacDstAddr: %02X"%(msg[11]+msg[12]*256))
-					HexShow("Data:",msg[13:msg[1]+3])
-					ProcessZDOmsgs((msg[4]+msg[5]*256),msg[6], (msg[8]*256+msg[7]), msg[9],msg[10],msg[13:msg[1]+3])  # (SrcAddr, WasBroadcast, ClusterID, SecurityUse, SeqNum, pData):
+					HexShow("Data:",msg[13:msg[1]+4])
+					ProcessZDOmsgs((msg[4]+msg[5]*256),msg[6], (msg[8]*256+msg[7]), msg[9],msg[10],msg[13:msg[1]+4])  # (SrcAddr, WasBroadcast, ClusterID, SecurityUse, SeqNum, pData):
 
 		if msg[2]>>5 & 0x07 is CMD0_TYPE_SRSP:
 			print("CMD0_TYPE_SRSP")
@@ -186,14 +207,26 @@ def ZDO_RegisterForZDOMsgCB(ClsusterID):
 def ZDO_RemoveForZDOMsgCB(ClusterID):
 	DataRequest(struct.pack("<BBBH"), 0x02,0x25,0x3F,ClusterID)
 
+def ZDP_MgmtPermitJoinReq( dstAddr, duration, TcSignificance ):
+	DataRequest(struct.pack("<BBBBHBB", 0x05, 0x25, 0x36, 0x02, dstAddr, duration, TcSignificance ))
+
 def ZDO_Send_Data(DesAddr, Transeq, Cmd, lenth, zod_msg):
 	msg = struct.pack("<BBHBHB", 0x45, 0x28, DesAddr, Transeq, Cmd, lenth) + zod_msg
 	DataRequest(struct.pack("<B", len(msg) - 2) + msg)
+
+def ZDP_ActiveEPReq(dstAddr,SeqNum, NWKAddrOfInterest ):
+	msg = struct.pack("<H", NWKAddrOfInterest)
+	ZDO_Send_Data(dstAddr, SeqNum, Active_EP_req, len(msg), msg)
 
 #This callback message is in response to the ZDO Match Descriptor Request
 def ZDO_Mactch_Desc_Rsp(DesAddr, SeqNum, Status, NwkAddr, MatchLength, MatchList):
 	msg = struct.pack("<BHB", Status,NwkAddr,MatchLength)+ MatchList
 	ZDO_Send_Data(DesAddr, SeqNum, Match_Desc_rsp, len(msg), msg)
+
+#This function processes a Management Leave Request and generates the response.
+def ZDO_ProcessMgmtLeaveReq(DstAddr, pDeviceAddr, RemoveChildren_Rejoin):
+	msg = struct.pack("<BBBH", 0x0B, 0x25, 0x34, DstAddr)+ pDeviceAddr + struct.pack("<B",RemoveChildren_Rejoin)
+	DataRequest( msg )
 
 def ZDP_EPRsp(DesAddr, SeqNum, Status, NwkAddr, lenth, EPList):
 	msg = struct.pack("<BHB", Status,NwkAddr,lenth)+ EPList
@@ -286,19 +319,28 @@ time.sleep(0.1)
 AF_RegisterAppEndpointDescription(0x01, 0x0104, 0x0000, 0x00, 0x00, 1,struct.pack("<H", 0x0006), 1,struct.pack("<H", 0x0006))
 time.sleep(0.1)
 ZDO_RegisterForZDOMsgCB(Match_Desc_req)# mesh req
+time.sleep(0.1)
 ZDO_RegisterForZDOMsgCB(Device_annce)#
 time.sleep(0.1)
-DataRequest( ZB_PERMIT_JOINING_REQUEST +  struct.pack("<HB", 0xFFFC, 0x0) )
+ZDO_RegisterForZDOMsgCB(Active_EP_rsp)
+time.sleep(0.1)
+#DataRequest( ZB_PERMIT_JOINING_REQUEST +  struct.pack("<HB", 0xFFFC, 0x10) )
+ZDP_MgmtPermitJoinReq(0xFFFC,20,1)
+
+while(1):
+	InputMac = input("duration = ")
+	duration = bytes.fromhex(InputMac)
+	ZDP_MgmtPermitJoinReq(0xFFFC, duration[0], 1)
 """
 status = 0x01
 while 1:
 	if status is 1:
 		status = 0x00
-		zcl_msg = struct.pack("<BBB",0x01,0x00,0x01)
+		zcl_msg = struct.pack("<BBB",0x01,0x00,0x01)#zcl_fc + SeqNum + cmd + Variable
 	else:
 		status = 0x01
 		zcl_msg = struct.pack("<BBB", 0x01, 0x00, 0x00)
-	AF_DataRequest(0x119F,1,1,0x0006,1,0x30,30,len(zcl_msg),zcl_msg)
+	AF_DataRequest(0x119F,1,1,0x0006,1,AF_SUPRESS_ROUTE_DISC_NETWORK|AF_EN_SECURITY,30,len(zcl_msg),zcl_msg)
 	time.sleep(4)
 """
 thrd.join()
