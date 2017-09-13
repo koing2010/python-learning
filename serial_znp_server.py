@@ -224,7 +224,7 @@ def ZDO_Mactch_Desc_Rsp(DesAddr, SeqNum, Status, NwkAddr, MatchLength, MatchList
 	ZDO_Send_Data(DesAddr, SeqNum, Match_Desc_rsp, len(msg), msg)
 
 #This function processes a Management Leave Request and generates the response.
-def ZDO_ProcessMgmtLeaveReq(DstAddr, pDeviceAddr, RemoveChildren_Rejoin):
+def  ZDO_ProcessMgmtLeaveReq(DstAddr, pDeviceAddr, RemoveChildren_Rejoin):
 	msg = struct.pack("<BBBH", 0x0B, 0x25, 0x34, DstAddr)+ pDeviceAddr + struct.pack("<B",RemoveChildren_Rejoin)
 	DataRequest( msg )
 
@@ -326,6 +326,16 @@ ZDO_RegisterForZDOMsgCB(Active_EP_rsp)
 time.sleep(0.1)
 #DataRequest( ZB_PERMIT_JOINING_REQUEST +  struct.pack("<HB", 0xFFFC, 0x10) )
 ZDP_MgmtPermitJoinReq(0xFFFC,20,1)
+"""
+while(1):
+    InputMac = input("duration = ")
+    if len(InputMac) is 29:
+        msg = bytes.fromhex(InputMac)
+        desAddr = struct.unpack("<H",msg[0:2])
+        ZDO_ProcessMgmtLeaveReq(desAddr[0], msg[2:] , 0)
+    else:
+        print("InPut lentherro")
+"""
 
 while(1):
 	InputMac = input("duration = ")
