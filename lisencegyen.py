@@ -73,10 +73,49 @@ def encrypt(src,size_src,key):
 
 #*********************************
 
+def tea_decryt(v, k):
+	y, z = struct.unpack('<II', v)
+
+	sum_value = 0xC6EF3720
+	i = 0
+	delta = 0x9e3779b9
+	a, b, c, d = struct.unpack('<IIII', k)
+	for i in range(32):
+		z -= ((y << 4) + c) ^ (y + sum_value) ^ ((y >> 5) + d)
+		z &= 0xFFFFFFFF
+		y -= ((z << 4) + a) ^ (z + sum_value) ^ ((z >> 5) + b)
+		y &= 0xFFFFFFFF
+		sum_value -= delta
+		sum_value &= 0xFFFFFFFF
+	# print(y,z)
+	#		print(y,z)
+	r = struct.pack('<II', y, z)
+	return r
+
+def decrypt(src,size_src,key):
+
+	a = 0
+	i = 0
+	num = 0
+
+	#将明文补足为8字节的倍数
+	a = size_src % 8
+	if a != 0:
+		for i in range(8 - a):
+			src[size_src] = 0x00
+			size_src += 1
+	#加密
+	num = size_src / 8
+	s = (b'')
+	for i in range(int(num)):
+		s += tea_decryt(src[i*8:i*8+8],key)
+
+	return s
+
 #******************************************************************************
 
 
-InputMac=input('Input MAC eg:00 12 4B 00 07 6B 03 44"')
+InputMac=input('Input MAC eg:00 12 4B 00 07 6B 03 44')
 MySalt = (b'\x0A\x0B\x0C\x0D\x0E\x0F\x1A\xAB')
 if len(InputMac) is 23:
 	print('success')
@@ -91,6 +130,7 @@ if len(InputMac) is 23:
 #	print(BufAddSalt )
 #加密两侧
 	FirstBytes = encrypt(BufAddSalt,len(BufAddSalt),password)
+	HexShow(decrypt(FirstBytes,len(FirstBytes),password))
 	TargetBytes = encrypt(FirstBytes[0:8],8,password)
 #结果输出也倒换一下
 	x,y = struct.unpack('<LL',TargetBytes)
