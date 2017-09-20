@@ -21,9 +21,10 @@ def tcpclientlink(sock, addr):
  #   sock.settimeout(30000)
     while True:
         data = sock.recv(1024)
-        if data == 'exit'or not data:
+        if data == 'exit'.encode(encoding='utf-8')or not data:
             sock.send('Goodbye!'.encode(encoding='utf-8'))
             break
+        print(data,'\n')
         sock.send(data)
     sock.close
     print("Connection from %s:%s closed"%addr)
