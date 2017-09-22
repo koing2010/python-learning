@@ -7,7 +7,6 @@ import struct
 import sys
 import queue
 import TEA
-import tea
 import hashlib
 from zlib import crc32
 
@@ -35,7 +34,7 @@ FileSizeAtrr  = 0x0A
 FileDataAtrr  = 0x0B
 # define the ack status
 StatusSuccess = 0x00
-MD5 = hashlib.md5()
+#MD5 = hashlib.md5()
 
 class myThread (threading.Thread):
     def __init__(self, threadID, name, q):
@@ -55,7 +54,7 @@ class myThread (threading.Thread):
             print("Thread Start ERRO!")
         print("Exiting " + self.name)
 #user input
-def inputTxThread(threadName,q):
+def inputTxThread(threadName,MsgQue):
     print(threadName + "start3")
     while True:
         data = input('Please input CMD')
@@ -64,45 +63,54 @@ def inputTxThread(threadName,q):
             msg = struct.pack('<H',0x0040)
             HexShow("msg= ",msg)
             #
-            msg = PackSendData(msg, 0x01, ClusterDoorLock, 0, 0)
-            #HexShow("msg= ", msg)
-            sendQueue.put(msg)
+            sendQueue.put(PackSendData(msg, 0x01, ClusterDoorLock, 0, 0))
             delay = 0
             while True:
-                if not q.empty():
-                    rxdata = q.get()
-                    if rxdata[0] == 0x00:#status
+                if not MsgQue.empty():
+                    rxdata = MsgQue.get()
+                    if rxdata[0] == StatusSuccess:#status
                         print("Success")
                         if rxdata[1]== 0x08:# must be 8
                             print("lenth Success")
                             Random = TEA.decrypt(rxdata[2:10],PublicKey)
                             print("Random =",Random)
                             print("UserINputKeyWords=",data[9:])
+                            MD5 = hashlib.md5()
                             MD5.update(data[9:].encode(encoding='utf-8')+ PassWordSalt)
                             Md5InputKey = str.upper((MD5.hexdigest())[0:32:4])
-                            print("MD5'user_input' + 'passwd_salt'",Md5InputKey)
+                            print("MD5(UserINputKeyWords+PassWordSalt)=",Md5InputKey)
                             crc = crc32(Md5InputKey.encode(encoding='utf-8')+ Random + RandNumberSalt)
                             crc_turn = str.upper((hex(crc)[2:])).encode(encoding='utf-8')
-                            print("crc32 value is",crc_turn)
+                            if len(crc_turn) != 8:
+                                n = len(crc_turn)
+                                print("len(crc_turn)=",n)
+                                for i in range(8- n):
+                                    crc_turn = "0".encode(encoding='utf-8')+crc_turn
+                            print("Crc32Value=",crc_turn)
                             PassWord = TEA.encrypt(crc_turn,PublicKey)
                             HexShow("tea(crc32)=",PassWord)
                             msg = struct.pack('<BB',len(PassWord)+1,0x01)+PassWord
+                            HexShow("Open Msg CMD",msg)
                             sendQueue.put(PackSendData(msg, 0x01, ClusterDoorLock, 1, 0))#cmd 0 unlock
-
-                elif delay > 12:#  timeout = 6s
+                        break
+                    else:
+                        sendQueue.put(PackSendData(msg, 0x01, ClusterDoorLock, 0, 0))
+                        break
+                elif delay < 12:#  timeout = 6s
                     time.sleep(0.5)
                     delay = delay + 1
+                    print("Waiting:%d..."%delay)
                     continue
                 else:
+                    print("Open Door TimeOut!")
                     break
         elif data[0:8] == "SET DOOR":
             HexShow("input =",data[8:].encode(encoding='utf-8'))
+            MD5 = hashlib.md5()
             MD5.update(data[8:].encode(encoding='utf-8')+ PassWordSalt)
-
             md5hex = (MD5.hexdigest())[0:32:4]
             print(str.upper(md5hex))
             setWord = TEA.encrypt(str.upper(md5hex).encode(encoding='utf-8'),PublicKey)
-            #setWord = TEA.tea_encrypt(str.upper(md5hex).encode(encoding='utf-8'),PublicKey)
             HexShow('SetWord=',setWord)
             msg = struct.pack('<HBBB',0x0001,0x00,0x02,len(setWord)) + setWord#userID 2bytes + userStatus 1byte + userKeyType 1byte + userKeyLenth 1byte
             sendQueue.put(PackSendData(msg, 0x01, ClusterDoorLock, 1, 0x05))  # cmd 5 set password
@@ -203,7 +211,7 @@ string = ''
 queueLock = threading.Lock()
 workQueue = queue.Queue(maxsize = 10)
 sendQueue = queue.Queue(maxsize = 10)
-userInputQueue = queue.Queue(maxsize = 2)
+userInputQueue = queue.Queue(maxsize = 10)
 
 Rxthrd = myThread(1,'uartRxThread',workQueue)
 Rxthrd.start()# start threading
@@ -226,7 +234,7 @@ while (1) :
     HexShow( "UartRxMsg",rx_string )
     if (len(rx_string) >= 14) and ((rx_string[len(rx_string)-1]*256 + rx_string[len(rx_string)-2]) == cal_crc16(rx_string,len(rx_string)-2)):# 2 = (SN + W_CMD + SIZE -CRC16)
         print("CHECK MSG SUCCESS !")
-        IEEE64 = rx_string[7:16]
+        #IEEE64 = rx_string[7:16]
         cluster = struct.unpack('<H',rx_string[17:19])[0]
         fc_type = struct.unpack('<B',rx_string[19:20])[0]
         Inputcmd = struct.unpack('<B',rx_string[20:21])[0]
@@ -241,7 +249,6 @@ while (1) :
         print("fc_type:%02X"%fc_type)
         print("cluster:%04X"%cluster)
         if cluster == 0x0101:
-
             if Inputcmd == 0x01:#read responce
                 print("Inputcmd:%02X" % Inputcmd)
                 if atrrCmd is 0x0040:
@@ -250,12 +257,12 @@ while (1) :
                     HexShow("Send Msg to UserInput Threading",rx_string[23:])
             if Inputcmd == 0x0B:# type cmd rsp
                 print("CMD ",hex(rx_string[21])," RSP ")
-                if rx_string[22] == 0x00:
-                    print('\rSUCCESS')
+                if rx_string[22] == StatusSuccess:
+                    print("\rSUCCESS<<<(------")
                 else:
-                    print('\rFAILURE')
+                    print("\rFAILURE<<<(------")
         else:
-            print("cluster:%04X" % 0x0101)
+            print("Others Cluster")
 
 # else:
 
