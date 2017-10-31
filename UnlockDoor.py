@@ -18,7 +18,7 @@ Send_Lenth = 0x0001
 Send_SN = 1
 TyHeader = 0xB8
 ProtocolType= 0x01
-IEEE64 = bytes.fromhex("08 41 82 BB 0D 00 4B 12 00")#(b'\x08\x7D\x7B\xBB\x0D\x00\x4B\x12\x00')
+IEEE64 = bytes.fromhex("08 F7 7F BB 0D 00 4B 12 00")#(b'\x08\x7D\x7B\xBB\x0D\x00\x4B\x12\x00')
 print(IEEE64)
 EndPoint = 0x0E
 ClusterDoorLock = 0x0101
@@ -35,6 +35,12 @@ FileDataAtrr  = 0x0B
 # define the ack status
 StatusSuccess = 0x00
 #MD5 = hashlib.md5()
+
+START_L_STATE = 0
+START_H_STATE = 1
+LEN_L_STATE = 2
+LEN_H_STATE = 3
+DATA_STATE = 4
 
 class myThread (threading.Thread):
     def __init__(self, threadID, name, q):
@@ -58,11 +64,11 @@ def inputTxThread(threadName,MsgQue):
     print(threadName + "start3")
     while True:
         data = input('Please input CMD')
-        if data[0:9] == "OPEN DOOR":
+        if (data[0:9] == "OPEN DOOR") or (data[0:9] == "CLOS DOOR"):#OPEN DOOR123456
             #bytesData = bytes.fromhex(data[9:])
             msg = struct.pack('<H',0x0040)
             HexShow("msg= ",msg)
-            #
+            #read the Random data
             sendQueue.put(PackSendData(msg, 0x01, ClusterDoorLock, 0, 0))
             delay = 0
             while True:
@@ -91,7 +97,11 @@ def inputTxThread(threadName,MsgQue):
                             HexShow("tea(crc32)=",PassWord)
                             msg = struct.pack('<BB',len(PassWord)+1,0x01)+PassWord
                             HexShow("Open Msg CMD",msg)
-                            sendQueue.put(PackSendData(msg, 0x01, ClusterDoorLock, 1, 0))#cmd 0 unlock
+                            if(data[0:9] == "CLOS DOOR"):
+                                CMD = 0
+                            else:
+                                CMD = 1
+                            sendQueue.put(PackSendData(msg, 0x01, ClusterDoorLock, 1, CMD))#cmd 0 unlock
                         break
                     else:
                         sendQueue.put(PackSendData(msg, 0x01, ClusterDoorLock, 0, 0))
@@ -104,7 +114,7 @@ def inputTxThread(threadName,MsgQue):
                 else:
                     print("Open Door TimeOut!")
                     break
-        elif data[0:8] == "SET DOOR":
+        elif data[0:8] == "SET DOOR":#SET DOOR123456
             HexShow("input =",data[8:].encode(encoding='utf-8'))
             MD5 = hashlib.md5()
             MD5.update(data[8:].encode(encoding='utf-8')+ PassWordSalt)
@@ -113,7 +123,40 @@ def inputTxThread(threadName,MsgQue):
             setWord = TEA.encrypt(str.upper(md5hex).encode(encoding='utf-8'),PublicKey)
             HexShow('SetWord=',setWord)
             msg = struct.pack('<HBBB',0x0001,0x00,0x02,len(setWord)) + setWord#userID 2bytes + userStatus 1byte + userKeyType 1byte + userKeyLenth 1byte
-            sendQueue.put(PackSendData(msg, 0x01, ClusterDoorLock, 1, 0x05))  # cmd 5 set password
+            sendQueue.put(PackSendData(msg, 0x01, ClusterDoorLock, 1, 0x05))  # cmd = 5 ,set password
+        elif data[0:9] == "SET LOCAL":#SET LOCAL234567
+            HexShow("input =",data[9:].encode(encoding='utf-8'))
+            msg = struct.pack('<H',0x0040)
+            HexShow("msg= ",msg)
+            #read the Random data
+            sendQueue.put(PackSendData(msg, 0x01, ClusterDoorLock, 0, 0))
+            delay = 0
+            while True:
+                if not MsgQue.empty():
+                    rxdata = MsgQue.get()
+                    if rxdata[0] == StatusSuccess:#status
+                        print("Success")
+                        if rxdata[1]== 0x08:# must be 8
+                            print("lenth Success")
+                            Random = TEA.decrypt(rxdata[2:10],PublicKey)
+                            print("Random =",Random)
+                            print("UserINputKeyWords=",data[9:])
+                            setWord = TEA.encrypt(data[9:].encode(encoding='utf-8')+Random[0:8:4], PublicKey)
+                            setWord = setWord + struct.pack('>BIBII', 0x1C,0x20171129, 0x7F, 0x55090100,0x55183000 )  # local pass word format :Cbitmsps + DateEnd + WeekBitMaps + DayTimeStart + DayTimeEnd
+                            #setWord = setWord + struct.pack('>BIBII', 0x00, 0x20171129, 0x00, 0x00000000,0x00000000)  # local pass word format :Cbitmsps + DateEnd + WeekBitMaps + DayTimeStart + DayTimeEnd
+                            HexShow('SetWord=', setWord)
+                            msg = struct.pack('<HBBB', 150, 0x00, 0x00, len(setWord)) + setWord  # userID 2bytes + userStatus 1byte + userKeyType 1byte + userKeyLenth 1byte
+                            sendQueue.put(PackSendData(msg, 0x01, ClusterDoorLock, 1, 0x05))  # cmd = 5 ,set password
+                        break
+        elif data[0:9] == "DEL LOCAL":#DEL LOCAL1
+            if len(data) > 9:
+                msg = struct.pack('<H',151)
+            else:
+                msg = struct.pack('<H',150) # UserID
+            sendQueue.put(PackSendData(msg, 0x01, ClusterDoorLock, 1, 0x07))  # cmd = 7 ,ClearPinCode
+        elif data[0:4] == "TIME":
+            msg = struct.pack('<HBI',0x0000, 0xE2, int(time.time()))
+            sendQueue.put(PackSendData(msg, 0x01, 0x000A, 0, 0x02))  # cmd = 2 ,write
         else:
             print("format erro")
 # usart tx data
@@ -127,43 +170,55 @@ def txdata(threadName, q):
 			time.sleep(0.05)
 #usart rx data
 def process_data(threadName, q):
-	print(threadName + "start")
-	rxdata  = (b'')
-	while (1):
-		#wait ack of handshake
-		while s.inWaiting() == 0:#wait ack
-			pass
-		time.sleep(0.008)
-		ack_numb = s.inWaiting()#read the numb of bytes received
-		rxdata =rxdata + s.read(ack_numb)
-		while (1):
-			if(rxdata[0] is 0x5B) and (rxdata[1] is 0xB5):
-				templen = len(rxdata)
-				if templen >= 4:
-					frame_lenth =  rxdata[2] + rxdata[3]*256
-					if frame_lenth <= templen:
-						workQueue.put(rxdata[0:frame_lenth])
-						#print("more")
-						rxdata = rxdata[frame_lenth:templen]
-					else:
-						time.sleep(0.005)
-						ack_numb = s.inWaiting()  # read the numb of bytes received
-						if(frame_lenth - templen) <= ack_numb:
-							rxdata = rxdata + s.read(frame_lenth - templen)
-							workQueue.put(rxdata)
-							rxdata = (b'')
-						else:#timeout
-							rxdata = (b'')
-					break
-			else:
-				for i in range(len(rxdata)):
-					if rxdata[i] is 0xFE:
-						rxdata = rxdata[i:len(rxdata)]
-						break #break the for loop
-					else:
-						continue
-				rxdata = (b'')
-				break;#while
+    print(threadName + "start")
+    RxStatus = START_L_STATE
+    LenToken = 0
+    LenTemp = 0
+    while True:
+        while s.inWaiting() == 0:
+            pass
+        byte = s.read(1)
+        if RxStatus == START_L_STATE:
+            if byte[0] == 0x5B:
+                RxStatus = START_H_STATE
+                string = byte
+        elif RxStatus == START_H_STATE:
+            if byte[0] == 0xB5:
+                RxStatus = LEN_L_STATE
+                string += byte
+            else:
+                RxStatus = START_L_STATE
+        elif RxStatus == LEN_L_STATE:
+            if byte[0] < 128:
+                LenToken = byte[0]
+                LenTemp = 0
+                RxStatus = LEN_H_STATE
+                string += byte
+            else:
+                RxStatus = START_L_STATE
+        elif RxStatus == LEN_H_STATE:
+            if byte[0] == 0x00:
+                RxStatus = DATA_STATE
+                string += byte
+                LenTemp = 4
+            else:
+                RxStatus = START_L_STATE
+        elif RxStatus == DATA_STATE:
+            string += byte
+            LenTemp += 1
+
+            n = s.inWaiting()
+            if n <= (LenToken - LenTemp):
+                string += s.read(n)
+                LenTemp += n
+            else:
+                string += s.read(LenToken - LenTemp)
+                LenTemp += (LenToken - LenTemp)
+            if LenTemp == LenToken:
+                RxStatus = START_L_STATE
+                workQueue.put(string)# send the data to
+        else:
+            RxStatus = START_L_STATE
 	#	queueLock.acquire()
 	#	workQueue.put(rxdata)
     #    queueLock.release()
@@ -198,7 +253,7 @@ def cal_crc16(puchMsg,crc_count):
 				CRC ^= xorCRC
 	return CRC
 ###++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++###
-Comnumb = 'com8'
+Comnumb = 'com12'
 #Comnumb=input('输入串口号(如com9):')
 s = serial.Serial(Comnumb,115200)
 if s._port is None:
@@ -255,12 +310,12 @@ while (1) :
                     print("atrrCmd:%04X" % atrrCmd)
                     userInputQueue.put(rx_string[23:])
                     HexShow("Send Msg to UserInput Threading",rx_string[23:])
-            if Inputcmd == 0x0B:# type cmd rsp
-                print("CMD ",hex(rx_string[21])," RSP ")
+            if Inputcmd == 0x0B:# Secific cmd rsp
+                print("SecificCMD: ",hex(rx_string[21])," RSP Status %02X"%rx_string[22] )
                 if rx_string[22] == StatusSuccess:
-                    print("\rSUCCESS<<<(------")
+                    print("\rSUCCESS<<<------")
                 else:
-                    print("\rFAILURE<<<(------")
+                    print("\rFAILURE<<<------")
         else:
             print("Others Cluster")
 
