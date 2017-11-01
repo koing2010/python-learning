@@ -1,3 +1,4 @@
 pyserial/*
 testbin/*
 zigbeebin/*
+*.db
