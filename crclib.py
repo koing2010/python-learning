@@ -10,3 +10,10 @@ def cal_crc16(puchMsg,crc_count):
 			if (XORResult & 0xFF):
 				CRC ^= xorCRC
 	return CRC
+
+
+def CheckSum16(puchMsg):
+	Sum = 0
+	for i in range( len(puchMsg)):
+		Sum = Sum + puchMsg[i]
+	return Sum

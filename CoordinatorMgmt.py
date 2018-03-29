@@ -8,17 +8,19 @@ import sys
 import queue
 import TEA
 import hashlib
+import crclib
+import ModleMgmt
 from zlib import crc32
 
-PassWordSalt = 'F9120481520D8202FA0A02DFDB575BA7'.encode(encoding='utf-8')
-RandNumberSalt='A0FB8A2FD2352AF6432C481FCDD45CB2'.encode(encoding='utf-8')
-PublicKey =  (b'\x38\x45\x42\x37\x30\x30\x39\x39\x30\x46\x45\x44\x30\x36\x31\x44')
+PassWordSalt = '42D9BE8481B8DA5F21B24FD2859C08A8'.encode(encoding='utf-8')#'F9120481520D8202FA0A02DFDB575BA7'.encode(encoding='utf-8')
+RandNumberSalt='95060092B8596746D6AABC2E8294036F'.encode(encoding='utf-8')#'A0FB8A2FD2352AF6432C481FCDD45CB2'.encode(encoding='utf-8')
+PublicKey =  'F8370B9DB9D687C4'.encode(encoding='utf-8')# (b'\x38\x45\x42\x37\x30\x30\x39\x39\x30\x46\x45\x44\x30\x36\x31\x44')
 # define every command of
 Send_Lenth = 0x0001
 Send_SN = 1
 TyHeader = 0xB8
 ProtocolType= 0x01
-IEEE64 = bytes.fromhex("08 F7 7F BB 0D 00 4B 12 00")#(b'\x08\x7D\x7B\xBB\x0D\x00\x4B\x12\x00')
+IEEE64 = bytes.fromhex("08 72 82 BB 0D 00 4B 12 00")#(b'\x08\x7D\x7B\xBB\x0D\x00\x4B\x12\x00')
 print(IEEE64)
 EndPoint = 0x0E
 ClusterDoorLock = 0x0101
@@ -51,20 +53,33 @@ class myThread (threading.Thread):
     def run(self):
         print("Starting " + self.name)
         if self.threadID is 1:
-           process_data(self.name, self.q)
+            process_data(self.name, self.q)
         elif self.threadID is 2:
-           txdata(self.name, self.q)
+            txdata(self.name, self.q)
         elif self.threadID is 3:
             inputTxThread(self.name, self.q)
+        elif self.threadID is 4:
+            AutoSendThread(self.name, self.q)
         else:
             print("Thread Start ERRO!")
         print("Exiting " + self.name)
+
+#define
+def AutoSendThread(threadName, MsgQue):
+        print(threadName + "start")
+        while True:
+            time.sleep(10)
+            MsgQue.put("OPEN DOOR123456")
+            #time.sleep(2.5)
+            #userInputQueue.put("LOCK")
 #user input
 def inputTxThread(threadName,MsgQue):
     print(threadName + "start3")
     while True:
-        data = input('Please input CMD')
-        if (data[0:9] == "OPEN DOOR") or (data[0:9] == "CLOS DOOR"):#OPEN DOOR123456
+        while not AutoOpenQueue.empty():
+            pass
+        data = AutoOpenQueue.get()#input('Please input CMD')
+        if (data[0:9] == "OPEN DOOR") or (data[0:9] == "CLOS DOOR") or (data[0:9] == "CHEK DOOR"):#OPEN DOOR123456
             #bytesData = bytes.fromhex(data[9:])
             msg = struct.pack('<H',0x0040)
             HexShow("msg= ",msg)
@@ -99,6 +114,8 @@ def inputTxThread(threadName,MsgQue):
                             HexShow("Open Msg CMD",msg)
                             if(data[0:9] == "CLOS DOOR"):
                                 CMD = 0
+                            elif(data[0:9] == "CHEK DOOR"):
+                                CMD = 2
                             else:
                                 CMD = 1
                             sendQueue.put(PackSendData(msg, 0x01, ClusterDoorLock, 1, CMD))#cmd 0 unlock
@@ -142,8 +159,8 @@ def inputTxThread(threadName,MsgQue):
                             print("Random =",Random)
                             print("UserINputKeyWords=",data[9:])
                             setWord = TEA.encrypt(data[9:].encode(encoding='utf-8')+Random[0:8:4], PublicKey)
-                            setWord = setWord + struct.pack('>BIBII', 0x1C,0x20171129, 0x7F, 0x55090100,0x55183000 )  # local pass word format :Cbitmsps + DateEnd + WeekBitMaps + DayTimeStart + DayTimeEnd
-                            #setWord = setWord + struct.pack('>BIBII', 0x00, 0x20171129, 0x00, 0x00000000,0x00000000)  # local pass word format :Cbitmsps + DateEnd + WeekBitMaps + DayTimeStart + DayTimeEnd
+                            setWord = setWord + struct.pack('>BIBII', 0x18,0x00000000, 0x7F, 0x55191000,0x55191500 )  # local pass word format :Cbitmsps + DateEnd + WeekBitMaps + DayTimeStart + DayTimeEnd
+                            #setWord = setWord + struct.pack('>BIBII', 0x00, 0x20171129, 0x00, 0x00000000,0x00000000)  # local pass word format :Cbitmsps + DateEnd + WeekBq1itMaps + DayTimeStart + DayTimeEnd
                             HexShow('SetWord=', setWord)
                             msg = struct.pack('<HBBB', 150, 0x00, 0x00, len(setWord)) + setWord  # userID 2bytes + userStatus 1byte + userKeyType 1byte + userKeyLenth 1byte
                             sendQueue.put(PackSendData(msg, 0x01, ClusterDoorLock, 1, 0x05))  # cmd = 5 ,set password
@@ -157,6 +174,15 @@ def inputTxThread(threadName,MsgQue):
         elif data[0:4] == "TIME":
             msg = struct.pack('<HBI',0x0000, 0xE2, int(time.time()))
             sendQueue.put(PackSendData(msg, 0x01, 0x000A, 0, 0x02))  # cmd = 2 ,write
+        elif data[0:1] == "P":#permite join
+            sendQueue.put( ModleMgmt.PackSendDataToModle( bytes.fromhex(data[1:]),0x0036, 0x01, 0x00 ) ) #
+        elif data[0:2] == "DD":#Delete Device
+            if len(bytes.fromhex(data[2:])) is 8:
+                sendQueue.put(ModleMgmt.PackSendDataToModle(bytes.fromhex(data[2:]), 0x0034, 0x01, 0x00))
+            else:
+                print("DeleteDev: lenth of MAC erro\n")
+        elif data[0:3] == "GDL":#get device list
+             sendQueue.put(ModleMgmt.PackSendDataToModle(bytes.fromhex("00"), 0x0040, 0x01, 0x00))
         else:
             print("format erro")
 # usart tx data
@@ -227,7 +253,7 @@ def PackSendData( SendMsg, endpoint, cluster, headControl, Cmd):
 	SendMsg = struct.pack('<BBB', Send_SN, TyHeader, ProtocolType) + IEEE64 + struct.pack('<BHBB', endpoint, cluster, headControl, Cmd )+SendMsg
 	Send_Lenth = len(SendMsg) + 6 # 6 = start_2bytes + lenth_2bytes + crc16_2bytes
 	SendMsg =  struct.pack('<H',0xB55B) + struct.pack('<H',Send_Lenth) + SendMsg #add start lenth
-	SendMsg = SendMsg + struct.pack('<H', cal_crc16(SendMsg, len(SendMsg))) # add crc
+	SendMsg = SendMsg + struct.pack('<H', crclib.cal_crc16(SendMsg, len(SendMsg))) # add crc
 	return SendMsg
 #display hex string
 def HexShow(S_name,i_string):
@@ -240,18 +266,6 @@ def HexShow(S_name,i_string):
 #	print('ReceiveBytes: %i_string' % (hex_string))
 	print(S_name,hex_string,'	total:',hLen)
 
-#crc16 calculate
-def cal_crc16(puchMsg,crc_count):
-	xorCRC = 0xA001
-	CRC = 0xFFFF
-	for i in range(crc_count):
-		CRC ^= puchMsg[i]
-		for j in range(8):
-			XORResult = CRC & 0x01
-			CRC >>= 1
-			if (XORResult & 0xFF):
-				CRC ^= xorCRC
-	return CRC
 ###++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++###
 Comnumb = 'com12'
 #Comnumb=input('输入串口号(如com9):')
@@ -267,6 +281,7 @@ queueLock = threading.Lock()
 workQueue = queue.Queue(maxsize = 10)
 sendQueue = queue.Queue(maxsize = 10)
 userInputQueue = queue.Queue(maxsize = 10)
+AutoOpenQueue = queue.Queue(maxsize = 10)
 
 Rxthrd = myThread(1,'uartRxThread',workQueue)
 Rxthrd.start()# start threading
@@ -274,6 +289,8 @@ Txthrd = myThread(2,'uartTxThread',sendQueue)
 Txthrd.start()# start threading
 Inthrd =  myThread(3,'inputTxThread',userInputQueue)
 Inthrd.start()
+Sendthrd = myThread(4,'AutoSendThread',AutoOpenQueue)
+Sendthrd.start()
 #主体
 #s.write(b'\x5A\xA5\x10\x01\x01\x00\x00\x00\x02\x02\x01\xA5\x5A')
 time.sleep(0.2)
@@ -287,13 +304,17 @@ while (1) :
     print("\n")
 
     HexShow( "UartRxMsg",rx_string )
-    if (len(rx_string) >= 14) and ((rx_string[len(rx_string)-1]*256 + rx_string[len(rx_string)-2]) == cal_crc16(rx_string,len(rx_string)-2)):# 2 = (SN + W_CMD + SIZE -CRC16)
+    if (len(rx_string) >= 14) and ((rx_string[len(rx_string)-1]*256 + rx_string[len(rx_string)-2]) == crclib.cal_crc16(rx_string,len(rx_string)-2)):# 2 = (SN + W_CMD + SIZE -CRC16)
         print("CHECK MSG SUCCESS !")
         #IEEE64 = rx_string[7:16]
-        cluster = struct.unpack('<H',rx_string[17:19])[0]
-        fc_type = struct.unpack('<B',rx_string[19:20])[0]
-        Inputcmd = struct.unpack('<B',rx_string[20:21])[0]
-        atrrCmd = struct.unpack('<H',rx_string[21:23])[0]# atrrCmd is tuple
+        if rx_string[5] is 0x20:
+            print("ModelMsg In \n")
+            continue
+        else:
+            cluster = struct.unpack('<H',rx_string[17:19])[0]
+            fc_type = struct.unpack('<B',rx_string[19:20])[0]
+            Inputcmd = struct.unpack('<B',rx_string[20:21])[0]
+            atrrCmd = struct.unpack('<H',rx_string[21:23])[0]# atrrCmd is tuple
         #print(atrrCmd)
     else:
         print("handshake FAILED	 ! ack_numb = %d"%len(rx_string))

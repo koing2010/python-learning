@@ -16,7 +16,7 @@ Send_Lenth = 0x0001
 Send_SN = 1
 TyHeader = 0xB8
 ProtocolType= 0x01
-IEEE64 = (b'\x08\x7D\x7B\xBB\x0D\x00\x4B\x12\x00')
+IEEE64 = bytes.fromhex("78 82 BB 0D 00 4B 12 00")#(b'\x08\x7D\x7B\xBB\x0D\x00\x4B\x12\x00')
 EndPoint = 0x0E
 ClusterOTA = 0x0019
 HaHeader = 0x19 #type = 01 direction = 1 no_rsp = 1
@@ -40,6 +40,12 @@ FileSizeAtrr  = 0x0A
 FileDataAtrr  = 0x0B
 # define the ack status
 StatusSuccess = 0x00
+
+START_L_STATE = 0
+START_H_STATE = 1
+LEN_L_STATE = 2
+LEN_H_STATE = 3
+DATA_STATE = 4
 
 def MyTxThread():
 	time.sleep(20)
@@ -67,46 +73,57 @@ def txdata(threadName, q):
 			txda = sendQueue.get()
 			s.write(txda)
 			#HexShow("txthread:",txda)
-			time.sleep(0.05)
 #usart rx data
 def process_data(threadName, q):
-	print(threadName + "start")
-	rxdata  = (b'')
-	while (1):
-		#wait ack of handshake
-		while s.inWaiting() == 0:#wait ack
-			pass
-		time.sleep(0.008)
-		ack_numb = s.inWaiting()#read the numb of bytes received
-		rxdata =rxdata + s.read(ack_numb)
-		while (1):
-			if(rxdata[0] is 0x5B) and (rxdata[1] is 0xB5):
-				templen = len(rxdata)
-				if templen >= 4:
-					frame_lenth =  rxdata[2] + rxdata[3]*256
-					if frame_lenth <= templen:
-						workQueue.put(rxdata[0:frame_lenth])
-						#print("more")
-						rxdata = rxdata[frame_lenth:templen]
-					else:
-						time.sleep(0.005)
-						ack_numb = s.inWaiting()  # read the numb of bytes received
-						if(frame_lenth - templen) <= ack_numb:
-							rxdata = rxdata + s.read(frame_lenth - templen)
-							workQueue.put(rxdata)
-							rxdata = (b'')
-						else:#timeout
-							rxdata = (b'')
-					break
-			else:
-				for i in range(len(rxdata)):
-					if rxdata[i] is 0xFE:
-						rxdata = rxdata[i:len(rxdata)]
-						break #break the for loop
-					else:
-						continue
-				rxdata = (b'')
-				break;#while
+    print(threadName + "start")
+    RxStatus = START_L_STATE
+    LenToken = 0
+    LenTemp = 0
+    while True:
+        while s.inWaiting() == 0:
+            pass
+        byte = s.read(1)
+        if RxStatus == START_L_STATE:
+            if byte[0] == 0x5B:
+                RxStatus = START_H_STATE
+                string = byte
+        elif RxStatus == START_H_STATE:
+            if byte[0] == 0xB5:
+                RxStatus = LEN_L_STATE
+                string += byte
+            else:
+                RxStatus = START_L_STATE
+        elif RxStatus == LEN_L_STATE:
+            if byte[0] < 128:
+                LenToken = byte[0]
+                LenTemp = 0
+                RxStatus = LEN_H_STATE
+                string += byte
+            else:
+                RxStatus = START_L_STATE
+        elif RxStatus == LEN_H_STATE:
+            if byte[0] == 0x00:
+                RxStatus = DATA_STATE
+                string += byte
+                LenTemp = 4
+            else:
+                RxStatus = START_L_STATE
+        elif RxStatus == DATA_STATE:
+            string += byte
+            LenTemp += 1
+
+            n = s.inWaiting()
+            if n <= (LenToken - LenTemp):
+                string += s.read(n)
+                LenTemp += n
+            else:
+                string += s.read(LenToken - LenTemp)
+                LenTemp += (LenToken - LenTemp)
+            if LenTemp == LenToken:
+                RxStatus = START_L_STATE
+                workQueue.put(string)# send the data to
+        else:
+            RxStatus = START_L_STATE
 	#	queueLock.acquire()
 	#	workQueue.put(rxdata)
     #    queueLock.release()
@@ -141,7 +158,7 @@ def cal_crc16(puchMsg,crc_count):
 				CRC ^= xorCRC
 	return CRC
 ###++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++###
-Comnumb = 'com3'
+Comnumb = 'com11'
 #Comnumb=input('输入串口号(如com9):')
 s = serial.Serial(Comnumb,115200)
 if s._port is None:
@@ -203,7 +220,7 @@ else:
 			file_t.seek(FileOffset, 0)
 			ImageDtaBytes = file_t.read(MaxDataSize)
 			status = 0
-			tx_forme =   struct.pack('<BHHIIB',status,Manufacture, ImageType, FileVersion, FileOffset, len(ImageDtaBytes)) + ImageDtaBytes # H 2bytes,B 1byte,I 4bytes
+			tx_forme =   struct.pack('<BHHIIB',status,Manufacture, ImageType, FileVersion, FileOffset, len(ImageDtaBytes)) + ImageDtaBytes # H 2bytes,B 1by  te,I 4bytes
 
 			tx_string = PackSendData(tx_forme, EndPoint, ClusterOTA, HaHeader,CmdImageBlockRsp) # add startCode  lenth and crc
 
