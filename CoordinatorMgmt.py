@@ -20,7 +20,8 @@ Send_Lenth = 0x0001
 Send_SN = 1
 TyHeader = 0xB8
 ProtocolType= 0x01
-IEEE64 = bytes.fromhex("08 72 82 BB 0D 00 4B 12 00")#(b'\x08\x7D\x7B\xBB\x0D\x00\x4B\x12\x00')
+#IEEE64 = bytes.fromhex("08 72 82 BB 0D 00 4B 12 00")#(b'\x08\x7D\x7B\xBB\x0D\x00\x4B\x12\x00')
+IEEE64 = bytes.fromhex("08 6C 0C 4F 0E 00 4B 12 00")
 print(IEEE64)
 EndPoint = 0x0E
 ClusterDoorLock = 0x0101
@@ -78,7 +79,7 @@ def inputTxThread(threadName,MsgQue):
     while True:
         while not AutoOpenQueue.empty():
             pass
-        data = AutoOpenQueue.get()#input('Please input CMD')
+        data = input('Please input CMD')#AutoOpenQueue.get()#input('Please input CMD')
         if (data[0:9] == "OPEN DOOR") or (data[0:9] == "CLOS DOOR") or (data[0:9] == "CHEK DOOR"):#OPEN DOOR123456
             #bytesData = bytes.fromhex(data[9:])
             msg = struct.pack('<H',0x0040)
@@ -183,6 +184,14 @@ def inputTxThread(threadName,MsgQue):
                 print("DeleteDev: lenth of MAC erro\n")
         elif data[0:3] == "GDL":#get device list
              sendQueue.put(ModleMgmt.PackSendDataToModle(bytes.fromhex("00"), 0x0040, 0x01, 0x00))
+        elif data[0:2] == "RD":#get device list
+            if len(bytes.fromhex(data[2:])) is 4:
+                msg = PackSendData(bytes.fromhex(data[6:]), 0x01, struct.unpack("H",bytes.fromhex(data[2:6]))[0], 0, 0)
+                #HexShow("ReadCMd",msg)
+                sendQueue.put(msg)
+            else:
+                print("Input Attr lent erro")
+                print("e.g. read cluster 0x0000,attr0x0005.  Input:RD00000500")
         else:
             print("format erro")
 # usart tx data
@@ -267,7 +276,7 @@ def HexShow(S_name,i_string):
 	print(S_name,hex_string,'	total:',hLen)
 
 ###++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++###
-Comnumb = 'com12'
+Comnumb = 'com14'
 #Comnumb=input('输入串口号(如com9):')
 s = serial.Serial(Comnumb,115200)
 if s._port is None:
@@ -289,8 +298,8 @@ Txthrd = myThread(2,'uartTxThread',sendQueue)
 Txthrd.start()# start threading
 Inthrd =  myThread(3,'inputTxThread',userInputQueue)
 Inthrd.start()
-Sendthrd = myThread(4,'AutoSendThread',AutoOpenQueue)
-Sendthrd.start()
+#Sendthrd = myThread(4,'AutoSendThread',AutoOpenQueue)
+#Sendthrd.start()
 #主体
 #s.write(b'\x5A\xA5\x10\x01\x01\x00\x00\x00\x02\x02\x01\xA5\x5A')
 time.sleep(0.2)
@@ -337,6 +346,14 @@ while (1) :
                     print("\rSUCCESS<<<------")
                 else:
                     print("\rFAILURE<<<------")
+        elif cluster == 0x0000:# basic cluster
+            if Inputcmd == 0x01 and rx_string[23] == 0x00:  # read responce
+                print("Inputcmd:%02X" % Inputcmd)
+                print("%d"%rx_string[24])
+                print(rx_string[25:25+rx_string[24]])
+                print("%d" % rx_string[25+3+rx_string[24]])
+                print(rx_string[25+4+ rx_string[24]:])
+
         else:
             print("Others Cluster")
 
