@@ -11,20 +11,29 @@ from msvcrt import kbhit
 import pywinusb.hid as hid
 
 class UserDevice:
-    vendor_id = 0x07DA
+    vendor_id = 0x07da
     product_id = 0x2010
 
 def sample_handler(data):
-    #print(type(data))
+    #print("Rxdata",data)
     if(data[1] == 0x85):
-        temperature = data[3]+data[4]*256
-        humidity =  data[5]+data[6]*256
-        print("tempertature = %.2f "%(temperature/100),"humidity = %%%.2f"%(humidity/100))
+        if data[3] == 0xa5:
+            print("CHIP = CC2530 " , "CHIP_REV = %02X\n" % data[4])
+        elif data[3] == 0xb5:
+            print("CHIP = CC2531 ", "CHIP_REV = %02X\n" % data[4])
+        elif data[3] == 0x95:
+            print("CHIP = CC2533 ", "CHIP_REV = %02X\n" % data[4])
+        elif data[3] == 0x8d:
+            print("CHIP = CC2540 ", "CHIP_REV = %02X\n" % data[4])
+        elif data[3] == 0x41:
+            print("CHIP = CC2541 ", "CHIP_REV = %02X\n" % data[4])
+        else:
+            print("CHIP not Found!\n ")
     else:
         print("Raw data: 0X{0}".format(data))
 def sample_write(device, send_list):
     report = device.find_output_reports()
-    print(report)
+   # print(report)
     if report:
         report[0].set_raw_data(send_list)
         bytes_num = report[0].send()
@@ -63,10 +72,12 @@ def raw_test():
                 print("\nWaiting for data...\nPress any (system keyboard) key to stop...")
                 while not kbhit() and device.is_plugged():
                     #just keep the device opened to receive events
-                    sleep(5)
+                    sleep(3)
                     send_list = [0x00 for i in range(9)]
                     for i in range(9):
-                        send_list[i] = i
+                        send_list[i] = i+10
+                    send_list[0] = 0x00
+                    send_list[1] = 0x03
                     sample_write(device, send_list)
                 return
             finally:
