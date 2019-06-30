@@ -18,7 +18,7 @@ def PrintMstime():
 
 if __name__ == '__main__':
 
-    fs = 20  # 采样频率
+    fs = 25  # 采样频率
     N = 2048  # 采样点数
     N_HALF = 1024 #
     df = fs / (N - 1)  # 分辨率
@@ -31,11 +31,15 @@ if __name__ == '__main__':
     Yticks = np.arange(-150, 10, 10)
 
 
-    SendMsg = struct.pack('<B', 0x14)  #设置20MHz采样
-    SerialPort.write(SendMsg)
-
+    Frequency = 200
     while True:
-        SendMsg = struct.pack('<B',0x01) #20Mhz
+        Frequency = Frequency + 10
+        if(Frequency > 4200):
+            Frequency = 200
+        SendMsg = struct.pack('<BBI', 0xFE, 0x03, Frequency * 1000)  # 设置1000MHz采样
+        SerialPort.write(SendMsg)
+        time.sleep(0.05)
+        SendMsg = struct.pack('<BBBBBB', 0xFE, 0x01, 0x00, 0x00, 0x00, 0x00) #20Mhz
         SerialPort.write(SendMsg)
         XCosValue = []
         LoCosValue = []
@@ -46,10 +50,10 @@ if __name__ == '__main__':
             while SerialPort.inWaiting() == 0:
                 pass
             byte = SerialPort.read(4)
-            #Vpp = ( struct.unpack('<H', byte[0:2])[0] -2048)/2048.0
-            Vpp = math.cos((byte[3]) / 40 * 2 * math.pi  + 0.25* math.pi)
-            LoSinVpp =  math.cos( byte[2]/40 *2* math.pi  ) # 2pi*k  FPGA内计数是一个园周期,不乘以2
-            LoCosVpp =  math.cos( byte[3]/40 *2* math.pi )
+            Vpp = ( struct.unpack('<H', byte[0:2])[0] -2048)/2048.0
+            #Vpp = math.cos((byte[3]) / 100 * 2 * math.pi  + 0.25* math.pi)
+            LoSinVpp =  math.cos( byte[2]/100 *2* math.pi  ) # 2pi*k  FPGA内计数
+            LoCosVpp =  math.cos( byte[3]/100 *2* math.pi )
             XCosValue.append(Vpp)  # uints = mV, right lead 4bits
             LoSinValue.append(LoSinVpp)
             LoCosValue.append(LoCosVpp)
@@ -71,20 +75,37 @@ if __name__ == '__main__':
 
 
             absY = [20*math.log10(np.abs(x)+ 0.0000001)  for x in X_value]  # 求傅里叶变换结果的模.  DBM_3V 3v对应的功率
-            absYsinCos = [20 * math.log10(np.abs(x) + 0.0000001) for x in I_value]
+            absYsinCos = [20 * math.log10(np.abs(x) + 0.0000001) for x in I_Xvalue]
 
 
             pl.clf() #清楚画布上的内容
             pl.plot(f[0:N_HALF], absY[0:N_HALF],'-b') #[0:N_HALF]  只显示一半即可
-            pl.plot(f[0:N_HALF], absYsinCos[0:N_HALF], '-g')
+            #pl.plot(f[0:N_HALF], absYsinCos[0:N_HALF], '-g')
+            '''
+            n = 0
+            for n in range(N_HALF):
+                if(XCosValue[n] < 0.05 and XCosValue[n] >= 0 and XCosValue[n+1] > XCosValue[n]):
+                    break
+            pl.plot(XCosValue[n:n+100])'''
+
 
 
             I_acrcos = I_value[N_2MHZ].real / (np.abs(I_value[N_2MHZ]))
             Q_acrcos = Q_value[N_2MHZ].real / (np.abs(I_value[N_2MHZ] ))
             X_acrcos = X_value[N_2MHZ].real / (np.abs(X_value[N_2MHZ] ))
-            I_Xacrcos = I_Xvalue[N_4MHZ].real/np.abs(I_Xvalue[N_4MHZ])
-            Q_Xacrcos = Q_Xvalue[N_4MHZ].real / np.abs(Q_Xvalue[N_4MHZ])
+            I_Xacrcos = I_Xvalue[0].real/ (1.07* np.abs(X_value[N_2MHZ] ))
+            Q_Xacrcos = Q_Xvalue[0].real/ (1.07 * np.abs(X_value[N_2MHZ] ))
+
+            print(np.abs(X_value[N_2MHZ] ))
             print(I_Xacrcos, Q_Xacrcos )
+            if(I_acrcos < -1 ):
+                I_acrcos = -1
+            if(Q_acrcos < -1 ):
+                Q_acrcos = -1
+            if(I_acrcos > 1 ):
+                I_acrcos = 1
+            if(Q_acrcos > 1 ):
+                Q_acrcos = 1
 
             if(I_Xacrcos < -1 ):
                 I_Xacrcos = -1
@@ -95,7 +116,7 @@ if __name__ == '__main__':
             if(Q_Xacrcos > 1 ):
                 Q_Xacrcos = 1
 
-            I_Degree = round( (math.acos(  I_acrcos )/math.pi *180), 2)
+            I_Degree = round( (math.acos(  I_acrcos ) / math.pi * 180), 2)
             Q_Degree = round( (math.acos( Q_acrcos ) / math.pi * 180), 2)
             X_Degree =  round( (math.acos(X_acrcos ) / math.pi * 180), 2)
             I_X_Degree = round((math.acos(I_Xacrcos) / math.pi * 180), 2)
@@ -108,76 +129,17 @@ if __name__ == '__main__':
             Q_Degree1 = 360 - Q_Degree
             print( "Q Degree= %3.2f °" % (Q_Degree), "   %3.2f °" % Q_Degree1 )
 
-            Q_token = I_Degree + 90
-            if(Q_token >= 360):
-                Q_token = Q_token - 360
+            print("X_Degree = %3.2f °" % (X_Degree), "   %3.2f °" % (360 - X_Degree))
 
-            Q_token1 = I_Degree1 + 90
-            if(Q_token1 >= 360):
-                Q_token1 = Q_token1 - 360
+            print("I_X_Degree = %3.2f °" % (I_X_Degree), "   %3.2f °" % (360 - I_X_Degree) )
 
-            if( ((Q_token >= Q_Degree - 5) and (Q_token <= Q_Degree + 5))):
+            print("Q_X_Degree = %3.2f °" % (Q_X_Degree), "   %3.2f °" % (360 - Q_X_Degree) )
 
-                TrueIdegree = I_Degree
-                TrueQdegree = Q_Degree
-            elif  ((Q_token >= Q_Degree1 - 5) and(Q_token <= Q_Degree1 + 5)):
-
-                TrueIdegree = I_Degree
-                TrueQdegree = Q_Degree1
-
-            if ((Q_token1 >= Q_Degree - 5) and (Q_token1 <= Q_Degree + 5)):
-
-                TrueIdegree = I_Degree1
-                TrueQdegree = Q_Degree
-            elif  ((Q_token1 >= Q_Degree1 - 5) and(Q_token1 <= Q_Degree1 + 5)):
-                TrueIdegree = I_Degree1
-                TrueQdegree = Q_Degree1
-
-            print("TrueIdegree = %3.2f "% TrueIdegree, "TrueQdegree = %3.2f "% TrueQdegree)
-
-            print( "X Degree = %3.2f °" % X_Degree,  "   %3.2f °" % (360 - X_Degree) )
-
-            I_X_Degree1 = (360 - I_X_Degree)
-            print("I_X Degree = %3.2f °" % I_X_Degree, "   %3.2f °" %I_X_Degree1 )
-
-            Q_X_Degree1 = (360 - Q_X_Degree)
-            print("Q_X Degree = %3.2f °" % Q_X_Degree, "   %3.2f °" %Q_X_Degree1 )
-
-            Q_X_token = I_X_Degree + 90
-            if(Q_X_token >= 360 ):
-                Q_X_token = Q_X_token - 360
-            Q_X_token1 = I_X_Degree1 + 90
-            if (Q_X_token1 >= 360):
-                Q_X_token1 = Q_X_token1 - 360
-
-            if (((Q_X_token >= Q_X_Degree - 5) and (Q_X_token <= Q_X_Degree + 5))):
-
-                TrueI_Xdegree = I_X_Degree
-                TrueI_Qdegree = Q_X_Degree
-            elif ((Q_X_token >= Q_X_Degree1 - 5) and (Q_X_token <= Q_X_Degree1 + 5)):
-
-                TrueI_Xdegree = I_X_Degree
-                TrueI_Qdegree = Q_X_Degree1
-
-            if ((Q_X_token1 >= Q_X_Degree - 5) and (Q_X_token1 <= Q_X_Degree + 5)):
-
-                TrueI_Xdegree = I_X_Degree1
-                TrueI_Qdegree = Q_X_Degree
-            elif ((Q_X_token1 >= Q_X_Degree1 - 5) and (Q_X_token1 <= Q_X_Degree1 + 5)):
-                TrueI_Xdegree = I_X_Degree1
-                TrueI_Qdegree = Q_X_Degree1
-
-            print("TrueI_Xdegree = %3.2f °" % TrueI_Xdegree, "TrueI_Qdegree   %3.2f °" % TrueI_Qdegree)
-            if(TrueI_Xdegree < TrueIdegree):
-                X = TrueI_Xdegree + 360 - TrueIdegree
-            else:
-                X = TrueI_Xdegree -TrueIdegree
-            print("△ s= %3.2f °"% X)
            # print(math.atan( YsinYcos[0].real) /absYsinCos)
             #print( math.atan( YsinYcos[101].imag/ YsinYcos[101].real)  ,math.asin( YsinYcos[102].imag/ YsinYcos[102].real ) )
 
             print("\n")
-            pl.title('FFT')
+            pl.title( 'FFT %d MHZ '%Frequency+" RL(dB)= %3.2f"%absY[N_2MHZ])
             pl.ylabel('dBm')
             pl.xlabel('Frequency (MHz)')
             pl.yticks(Yticks)
