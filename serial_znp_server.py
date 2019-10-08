@@ -186,12 +186,7 @@ def ProcessRxData( msg ):
 		return ""
 
 
-# XOR of all the bytes
-def calcFCS(pMsg):
-	result = 0
-	for i in range(len(pMsg)):
-		result = result^pMsg[i]
-	return result & 0xFF
+
 
 #define the value of communication format
 def DataRequest(SendData):
@@ -281,7 +276,7 @@ def HexShow(S_name,i_string):
 #	print('ReceiveBytes: %i_string' % (hex_string))
 	print(S_name,hex_string,'	total:',hLen)
 		
-Comnumb = 'com5'
+Comnumb = 'com13'
 #Comnumb=input('输入串口号(如com9):')
 s = serial.Serial(Comnumb,115200)
 #s.setTimeout(0)
@@ -326,6 +321,9 @@ ZDO_RegisterForZDOMsgCB(Active_EP_rsp)
 time.sleep(0.1)
 #DataRequest( ZB_PERMIT_JOINING_REQUEST +  struct.pack("<HB", 0xFFFC, 0x10) )
 ZDP_MgmtPermitJoinReq(0xFFFC,20,1)
+
+DataRequest(struct.pack("<BBB",0x00,0x21,0x04))
+
 """
 while(1):
     InputMac = input("duration = ")
@@ -336,22 +334,31 @@ while(1):
     else:
         print("InPut lentherro")
 """
-
+"""
 while(1):
 	InputMac = input("duration = ")
 	duration = bytes.fromhex(InputMac)
 	ZDP_MgmtPermitJoinReq(0xFFFC, duration[0], 1)
 """
 status = 0x01
+seqnum = 0x01
+zcl_msg = struct.pack("<BBBH", 0x00,seqnum ,0x00, 0x0000)#zcl_fc + SeqNum + cmd + Variable
+AF_DataRequest(0x95FC, 1, 1, 0x0006, 1, AF_SUPRESS_ROUTE_DISC_NETWORK | AF_EN_SECURITY, 30, len(zcl_msg), zcl_msg)
+seqnum +=1
+zcl_msg = struct.pack("<BBBH", 0x00,seqnum ,0x00, 0x0000)#zcl_fc + SeqNum + cmd + Variable
+AF_DataRequest(0x95FC, 2, 1, 0x0006, 1, AF_SUPRESS_ROUTE_DISC_NETWORK | AF_EN_SECURITY, 30, len(zcl_msg), zcl_msg)
+time.sleep(4)
+
 while 1:
+	seqnum += 1
 	if status is 1:
 		status = 0x00
-		zcl_msg = struct.pack("<BBB",0x01,0x00,0x01)#zcl_fc + SeqNum + cmd + Variable
+		zcl_msg = struct.pack("<BBB",0x01,0x02,0x01)#zcl_fc + SeqNum + cmd + Variable
 	else:
 		status = 0x01
 		zcl_msg = struct.pack("<BBB", 0x01, 0x00, 0x00)
-	AF_DataRequest(0x119F,1,1,0x0006,1,AF_SUPRESS_ROUTE_DISC_NETWORK|AF_EN_SECURITY,30,len(zcl_msg),zcl_msg)
+	AF_DataRequest(0x95FC,1,1,0x0006,1,AF_SUPRESS_ROUTE_DISC_NETWORK|AF_EN_SECURITY,30,len(zcl_msg),zcl_msg)
 	time.sleep(4)
-"""
+
 thrd.join()
 s.close()

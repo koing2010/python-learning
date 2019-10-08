@@ -10,6 +10,42 @@ import matplotlib.pyplot as plt
 
 from skrf import Network, Frequency
 
+real = True
+echo = True
+
+if real:
+	s = serial.Serial('com14', 115200, timeout=2, xonxoff=False) #might need to add enable control settings
+
+def cmd(cmd_string):
+	if echo:
+		print(cmd_string)
+
+	if real:
+		s.write(bytes(cmd_string + '\n',encoding = "utf8"))
+		#s.readline() #unclear if this is needed
+
+def query(query_string):
+	if echo:
+		print(query_string)
+
+	if real:
+		s.write(bytes(query_string + '\n',encoding = "utf8"))
+		result = s.readline()
+		if echo:
+			print( "-> " +  str(result, encoding = "utf-8"))
+		return result
+
+def ReadMesure(query_string):
+	if echo:
+		print(query_string)
+	if real:
+		s.write(bytes(query_string + '\n', encoding="utf8"))
+		result = s.readline()
+		if echo:
+			powr = float(str(result, encoding="utf-8"))
+			print("-> " , powr, 'dbm')
+		return  powr
+
 
 #display hex string
 def HexShow(S_name,i_string):
@@ -24,37 +60,93 @@ def HexShow(S_name,i_string):
 
 MHz = 1000000
 SerialPort = serial.Serial("com16",115200)
-FrequencyStart = 1000000 # 5Mhz
-FreqSweepRate =  1000000 # 400kHz
-FreqSweepTimes = 179 #500 points
+FrequencyStart = 10*MHz # 5Mhz
+FreqSweepRate =  1*MHz # 400kHz
+FreqSweepTimes = 400 #500 points
+FrequencyEnd = FrequencyStart+FreqSweepRate*FreqSweepTimes
+
+
+#MAIN
+#sweep settings (MHz)
+
+
+
+
+query("*IDN?")
+query("*RST;*OPC?")
+
+cmd("*SEC 0")
+cmd("SYST:NONV:DIS") #disable NVRAM, manual says this is important for performance
+
+cmd("*SEC 1")
+#set input and output connectors
+cmd("INP RF2")
+cmd("OUTP RF3")
+
+#setup generator
+#cmd("SOURce:RFGenerator:TX:FREQuency 1MHZ")
+cmd("SOUR:RFG:TX:LEVel -10")
+cmd("SOUR:RFG:TX:FREQ %dE6" % (FrequencyStart/MHz)) #default level is -27dBm
+query("INIT:RFG;*OPC?")
+
+#exit()
+
+#setup analyzer either NPOW or POW, TBD
+#TODO Set BW, delay, measurement time, etc. here
+#cmd("LEV:MAX 0")
+#cmd("CONF:POW:CONT SCAL,NONE") #might not want this
+#cmd("CONF:SUB:POW IVAL,0,1")
+cmd("RFAN:BAND 1000e3")
+cmd("INIT:RFAN") #unclear if I need this, it's in the example
+#cmd("INIT:WPOW")
+
+
 MageCal = np.load('VmageCal.npy')# load the cal file
 
-SendMsg = struct.pack('<BBLBLL',15,0x02,FrequencyStart,0, FreqSweepRate,FreqSweepTimes) # L+B = 5bytes FreqCurrent
+SendMsg = struct.pack('<BBLBLL',15,0x02,FrequencyStart,0, FreqSweepRate, 1) # L+B = 5bytes FreqCurrent
 
 SendMsg = struct.pack("<B", 0xFE) + SendMsg + struct.pack("<B",crclib.calcFCS(SendMsg))  # XOR the general format frame fields
 
 HexShow("DataRequest:", SendMsg)
 
-SerialPort.write(SendMsg)
+
 Vphs = []
 Vmage = []
+t1 = time.time()
+PwrMesureList = []
+LastDegree = 1
 for i in range(FreqSweepTimes):
+
+    cmd("RFAN:FREQ %dE6" % ((FrequencyStart * FreqSweepRate* i)/MHz ))
+    cmd("SOUR:RFG:FREQ %dE6;*WAI" % ((FrequencyStart  + FreqSweepRate* i)/MHz))
+    ReadMesure("READ:RFAN:POW?")
+    #time.sleep(0.1)
+    SerialPort.write(SendMsg)
     while SerialPort.inWaiting() == 0:
         pass
     byte = SerialPort.read(4)
+    Degree = round( struct.unpack('<H',byte[0:2])[0]*3327.0/4096.0/10 -180, 4)
+    #if(Degree < -175):
+     # LastDegree = -1
+    #if(LastDegree ==-1 and Degree > -3 ):
+     #   LastDegree = 1
+    Degree = LastDegree*Degree
 
-    Vphs.append(round( 180- struct.unpack('<H',byte[0:2])[0]*3327.0/4096.0/10, 4))# adc convert to Voltage, then convert to degree
+
+    Vphs.append(Degree)# adc convert to Voltage, then convert to degree
 
     MageADC = struct.unpack('<H', byte[2:4])[0] * 3327.0 / 4096.0
-    Cal = MageCal[int((FrequencyStart + i*FreqSweepRate)/1000000)]
+
+    Cal = MageCal[int((FrequencyStart + FreqSweepRate*i)/10000000)]
     Relg = (MageADC - Cal)/30.0# get log value
+    Relg  = MageADC/30
     Relg =Relg/ 20.0
     if( Relg  > 1):
-        Relg = 0.9999
+       Relg = 0.9999
     if (Relg < -1):
-            Relg = -0.9999
+          Relg = -0.9999
 
-    T = math.pow(10,Relg )
+    T =Relg# math.pow(10,Relg )
     print('Relg= ',Relg,'   T= ',T )
     Vmage.append(round(T , 4))# uints = mV, right lead 4bits
 
@@ -77,7 +169,7 @@ print(ring_slot)
 #import numpy as np
 t = np.arange(FrequencyStart/MHz,(FreqSweepRate*FreqSweepTimes+FrequencyStart)/MHz, FreqSweepRate/MHz)#5Mhz - 200Mhz  0.4mhz step up
 VMageYscale = np.arange(-1,1, 0.1)
-VphsYscale =   np.arange(0, 180, 10)
+VphsYscale =   np.arange(-180, 180, 10)
 
 
 #plt.ion() #activre display

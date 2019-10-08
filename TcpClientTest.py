@@ -7,7 +7,7 @@ SendStr = (b'\x08\x7D\x7B\xBB\x0D\x00\x4B\x12\x00')
 
 
 s = socket.socket(socket.AF_INET,socket.SOCK_STREAM)
-s.connect(('127.0.0.1', 10001))#(('47.94.155.129',10001))#
+s.connect(('47.94.155.129',10001))#(('127.0.0.1', 10001))#
 
 #define the thread
 def thread_TcpRX():

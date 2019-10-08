@@ -10,7 +10,7 @@ real = True
 echo = True
 
 if real:
-	s = serial.Serial('com14', 115200, timeout=2, xonxoff=False) #might need to add enable control settings
+	s = serial.Serial('com9', 115200, timeout=2, xonxoff=False) #might need to add enable control settings
 
 def cmd(cmd_string):
 	if echo:
@@ -43,9 +43,9 @@ def ReadMesure(query_string):
 		return  powr
 #MAIN
 #sweep settings (MHz)
-freq_start = 10
-freq_end = 2650
-divisor = 10
+freq_start =2000
+freq_end = 2700
+divisor = 5
 
 query("*IDN?")
 query("*RST;*OPC?")
@@ -60,7 +60,7 @@ cmd("OUTP RF3")
 
 #setup generator
 #cmd("SOURce:RFGenerator:TX:FREQuency 1MHZ")
-cmd("SOUR:RFG:TX:LEVel 0")
+cmd("SOUR:RFG:TX:LEVel -0")
 cmd("SOUR:RFG:TX:FREQ %dE6" % freq_start) #default level is -27dBm
 query("INIT:RFG;*OPC?")
 
@@ -85,18 +85,20 @@ for f in range(int(freq_start/divisor),int(freq_end/divisor)):
 	#query("READ:SUB:POW?") #may not work with SCAL
 	PwrMesureList.append( ReadMesure("READ:RFAN:POW?"))
 	print(f*divisor," MHz")
-	#time.sleep(0.01)
+	time.sleep(0.05)
 	#query("READ:WPOW?")
 
 t2 = time.time()
 print("%0.3fs for %d points, %f points/s" % (t2-t1, (freq_end-freq_start)/divisor, (freq_end-freq_start)/(t2-t1)/divisor))
 
 Xscale =   np.arange(freq_start, freq_end, divisor)
-Yticks =   np.arange(-60, 10, 10)
+Yticks =   np.arange(-60, 30, 10)
+pl.figure(num='ZigbeeAntanaTest', figsize=(10, 6), dpi=120, edgecolor='g')
 pl.plot(Xscale,PwrMesureList)
-pl.ylabel('S21 dBm')
+pl.ylabel('S32 dBm')
 pl.xlabel('Frequency (MHz)')
 pl.yticks(Yticks)
+pl.title('S32')
 pl.grid(axis= 'y',linestyle='--')
 pl.show()
 
@@ -110,18 +112,20 @@ for f in range(int(freq_start/divisor),int(freq_end/divisor)):
 	#query("READ:SUB:POW?") #may not work with SCAL
 	PwrOpenMesureList.append( ReadMesure("READ:RFAN:POW?"))
 	print(f*divisor," MHz")
-	time.sleep(0.01)
+	time.sleep(0.05)
 	#query("READ:WPOW?")
 
 t2 = time.time()
 print("%0.3fs for %d points, %f points/s" % (t2-t1, freq_end-freq_start, (freq_end-freq_start)/(t2-t1)))
 
-pl.plot(Xscale,PwrMesureList)
+D_S32,  = pl.plot(Xscale,PwrMesureList, label ='DUT_S32' )
 
-pl.plot(Xscale,PwrOpenMesureList)
+DUT_RL, = pl.plot(Xscale,PwrOpenMesureList ,label = 'OPEN_S21')
 Dir = [a - b for a,b in zip(PwrOpenMesureList,PwrMesureList)]
 
-pl.plot(Xscale,Dir)
+OPEN_S21, = pl.plot(Xscale,Dir ,label = 'DUT_RL')
+
+pl.legend(handles=[OPEN_S21,D_S32, DUT_RL], mode="expand",loc=3,ncol=2,)
 pl.ylabel('S21 dBm')
 pl.xlabel('Frequency (MHz)')
 pl.yticks(Yticks)

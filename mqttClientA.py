@@ -1,5 +1,5 @@
 import paho.mqtt.client as mqtt
-Topic = "old"
+Topic = "zgateway0001"
 def on_connect(client, userdata, flags, rc):
     print("Connected with result code "+str(rc))
     client.subscribe( Topic )
@@ -10,7 +10,7 @@ def on_message(client, userdata, msg):
     print("Enter Msg")
 
 client = mqtt.Client(client_id="mac_id1234567891")
-client.username_pw_set("admin", "1111111")
+client.username_pw_set("admin", "q1w2e3r4")
 client.on_connect = on_connect
 client.on_message = on_message
 
