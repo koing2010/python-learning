@@ -10,7 +10,7 @@ import math
 import skrf
 from skrf import Network, Frequency
 from scipy import signal
-from VNACalibrate import Cal_Display
+from VNACalibrate import OnePortCreatIdealFile ,OnePortCreatMesureFile,Cal_Display
 from VNADataRequest import  VNA_DEV as VNA
 #  22.5527dbm.  3V 50R 对应的功率
 DBM_3V = 13.523
@@ -23,6 +23,11 @@ N_HALF = 1200  #
 DISPLAY_MODE = 0  # 1 wave, 0 spectrum
 CALIBRATION_MODE = True
 df = fs / (N - 1)  # 分辨率
+
+PORT_SEL = 0 # 0: Port1 ,  1 : port2
+REFLECT_SEL = 0 # 0: Port1 Reflect,   1: Port2 Reflect
+IDEAL_FILE_PAHT = 'measured/ideal/'
+MESURE_FILE_PAHT = 'measured/'
 
 def PrintMstime():
     t = time.time()
@@ -40,7 +45,7 @@ def PrintSkrfFile(Mage, Vphs, FreqStart, FreqRate, FileName):
 
 ##计算幅度和相位, 并转换到360度
 def CalImagePhase(I_ACC_Value,Q_ACC_Value):
-    print('I_ACC: %3.6f , Q_ACC: %3.6f ' % (I_ACC_Value, Q_ACC_Value))
+    #print('I_ACC: %3.6f , Q_ACC: %3.6f ' % (I_ACC_Value, Q_ACC_Value))
     Phase= math.atan(Q_ACC_Value / I_ACC_Value)
     Image = np.abs(I_ACC_Value * 2 / math.cos(Phase) / N / 0x20000)
     #Image = math.sqrt( math.pow(I_ACC_Value/ N / 0x20000,2) + math.pow(Q_ACC_Value/ N / 0x20000,2) )
@@ -56,13 +61,14 @@ def CalImagePhase(I_ACC_Value,Q_ACC_Value):
         targetPhase = 180 + PhaseInDegree
     return Image ,targetPhase #
 
+
 def VNASampling(FileName, ApplayCalibration):
 
     WAVE_Yticks = np.arange(-1, 1.2, 0.2)
 
-    FrequencyStart = 140
-    FrequencyEnd =4000
-    FreqSwepStep = 10
+    FrequencyStart = 1500 # 目前最小频率 140Mhz
+    FrequencyEnd =3500  # 最大设置4400
+    FreqSwepStep = 3
     PWRlevelReset = 38
     RangSweep = []
     AbsYSweepForward = []
@@ -78,12 +84,19 @@ def VNASampling(FileName, ApplayCalibration):
     vna.SetRF_PWRlevel(PWRlevel)  # set RF output level bit[5:0]
     vna.SetSamplingCKL(0)  # set sampling clock, first Byte H4
 
-    vna.SelectPort(0,0)# (1 = Port2,1 = Port Reflect)
+    vna.SelectPort(PORT_SEL,  REFLECT_SEL)# (1 = Port2,1 = Port Reflect)
+    vna.SetRF_LO_FRQ(Frequency)
+
+    if(ApplayCalibration is True ):
+        OnePortCreatIdealFile(IDEAL_FILE_PAHT, FrequencyStart, FrequencyEnd, FreqSwepStep) # 创建理论参考文件
+        OnePortCreatMesureFile(MESURE_FILE_PAHT, FrequencyStart, FrequencyEnd, FreqSwepStep)
+    #time.sleep(0,5)
     while True:
         #time.sleep(0.01)
-        if (Frequency >= FrequencyEnd):  # 显示RL 的曲线
-
-            if (len(AbsYSweepForward) == int((FrequencyEnd - FrequencyStart) / FreqSwepStep)):
+        if (round(Frequency,1) >= FrequencyEnd):  # 显示RL 的曲线
+            n_len = len(AbsYSweepForward)
+            print(round(Frequency,1),n_len)
+            if ( n_len == int((round(Frequency,1) - FrequencyStart) / FreqSwepStep)):
                 pl.clf()  # 清楚画布上的内容
                 pl.plot(RangSweep, AbsYSweepForward)  # fist scan
                 pl.plot(RangSweep, AbsYSweepReflect)
@@ -164,7 +177,7 @@ def VNASampling(FileName, ApplayCalibration):
 
             Image_F , PahseForward = CalImagePhase(IF_I_ACC, IF_Q_ACC)
             Image_R , PhaseReflect = CalImagePhase(IF_I_ACC_R, IF_Q_ACC_R)
-            print("%d MHz "%Frequency,"Image_F= ", Image_F,"Image_R= ", Image_R, "\n")
+            print("%.1f MHz "%Frequency,"Image_F= ", Image_F,"Image_R= ", Image_R, "\n")
             absY_F = 20 * math.log10(Image_F)  # 求傅里叶变换结果的模.  DBM_3V 3v对应的功率
             absY_R = 20 * math.log10(Image_R)
 
