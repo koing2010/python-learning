@@ -34,12 +34,45 @@ def PrintMstime():
     return int(round(t * 1000))  # 毫秒级时间戳
 
 
-def PrintSkrfFile(Mage, Vphs, FreqStart, FreqRate, FileName):
+def PrintTouchSone_1port_File(Mage, Vphs, FreqStart, FreqRate, FileName):
     MesureList = ['# MHz S MA R 50.0\n']
-    File = open(FileName, 'w')
+    File = open(FileName+ '.s1p', 'w')
     File.write(MesureList[0])
     for size in range(len(Mage)):
         MesureList.append('%.4f   %.8f   %.4f \n' % (((FreqStart + FreqRate * size), Mage[size], Vphs[size])))
+        File.write(MesureList[size + 1])
+    File.closed
+
+#创建 2 Port 文件
+def PrintTouchSone_2port_File(Mage, Vphs, FreqStart, FreqRate, FileName, MA_Sxx):
+    MesureList = ['# MHz S MA R 50.0\n']
+    File = open(FileName+ '.s2p', 'w')
+    File.write(MesureList[0])
+
+    magS11 = 0
+    angS11 = 0
+    magS21 = 0
+    angS21 = 0
+    magS12 = 0
+    angS12 = 0
+    magS22 = 0
+    angS22 = 0
+    for size in range(len(Mage)):
+
+        if(MA_Sxx == "S11"):
+            magS11 =  Mage[size]
+            angS11 =  Vphs[size]
+        elif (MA_Sxx == "S21"):
+            magS21 =  Mage[size]
+            angS21 =  Vphs[size]
+        elif (MA_Sxx == "S12"):
+            magS12 =  Mage[size]
+            angS12 =  Vphs[size]
+        elif (MA_Sxx == "S22"):
+            magS22 =  Mage[size]
+            angS22 =  Vphs[size]
+
+        MesureList.append('%.4f   %.8f   %.4f    %.8f   %.4f    %.8f   %.4f    %.8f   %.4f \n' % (((FreqStart + FreqRate * size),magS11,angS11,magS21,angS21, magS12 ,angS12 ,magS22, angS22 )))
         File.write(MesureList[size + 1])
     File.closed
 
@@ -61,16 +94,32 @@ def CalImagePhase(I_ACC_Value,Q_ACC_Value):
         targetPhase = 180 + PhaseInDegree
     return Image ,targetPhase #
 
+#  设置频率  活得 IQ 计算 Aagnitude and Angle
+def SamplingMagAngle(Frequency):
+    vna.SetRF_LO_FRQ(Frequency)
+    time.sleep(0.01)
+    vna.StartSamp()
+    while vna.SerialPort.inWaiting() == 0:
+        pass
+    byte = vna.SerialPort.read(16)
 
+    IF_I_ACC = struct.unpack('<i', byte[0:4])[0]
+    IF_Q_ACC = struct.unpack('<i', byte[4:8])[0]
+    IF_I_ACC_R = struct.unpack('<i', byte[8:12])[0]
+    IF_Q_ACC_R = struct.unpack('<i', byte[12:16])[0]
+    Image_F, PahseForward = CalImagePhase(IF_I_ACC, IF_Q_ACC)
+    Image_R, PhaseReflect = CalImagePhase(IF_I_ACC_R, IF_Q_ACC_R)
+
+    return   Image_F, PahseForward ,Image_R, PhaseReflect
 def VNASampling(FileName, ApplayCalibration):
 
     WAVE_Yticks = np.arange(-1, 1.2, 0.2)
 
-    FrequencyStart = 1500 # 目前最小频率 140Mhz
-    FrequencyEnd =3500  # 最大设置4400
-    FreqSwepStep = 3
+    FrequencyStart = 2000 # 目前最小频率 140Mhz
+    FrequencyEnd =3000  # 最大设置4400
+    FreqSwepStep = 5
     PWRlevelReset = 38
-    RangSweep = []
+
     AbsYSweepForward = []
     AbsYSweepReflect = []
     SkImage = []
@@ -89,142 +138,96 @@ def VNASampling(FileName, ApplayCalibration):
 
     if(ApplayCalibration is True ):
         OnePortCreatIdealFile(IDEAL_FILE_PAHT, FrequencyStart, FrequencyEnd, FreqSwepStep) # 创建理论参考文件
-        OnePortCreatMesureFile(MESURE_FILE_PAHT, FrequencyStart, FrequencyEnd, FreqSwepStep)
+        OnePortCreatMesureFile(MESURE_FILE_PAHT, FrequencyStart, FrequencyEnd, FreqSwepStep)# 提取SOL的测量文件
     #time.sleep(0,5)
+
+    FreqRangSweep = np.arange(FrequencyStart, FrequencyEnd , FreqSwepStep)
     while True:
-        #time.sleep(0.01)
-        if (round(Frequency,1) >= FrequencyEnd):  # 显示RL 的曲线
-            n_len = len(AbsYSweepForward)
-            print(round(Frequency,1),n_len)
-            if ( n_len == int((round(Frequency,1) - FrequencyStart) / FreqSwepStep)):
-                pl.clf()  # 清楚画布上的内容
-                pl.plot(RangSweep, AbsYSweepForward)  # fist scan
-                pl.plot(RangSweep, AbsYSweepReflect)
-                pl.title('S11 RL(dB)')
-                pl.ylabel('dB')
-                pl.xlabel('Frequency (MHz)')
-                pl.yticks(np.arange(-60, 20, 5))
-                pl.grid(axis='y', linestyle='--')
-                pl.show()
-                AbsYSweep = []
 
-                pl.clf()  # 清楚画布上的内容
-                # pl.plot(RangSweep,PahseSweepForward)#显示相位信息
+        for Frequency in FreqRangSweep:
+            Image_F, PahseForward, Image_R, PhaseReflect = SamplingMagAngle(Frequency)
 
-                # SubPhase = np.subtract(np.array(PahseSweepReflect),np.array(PahseSweepForward))
-                pl.plot(RangSweep, PahseSweepReflect)
-                pl.title('S11 RP(°)')
-                pl.xlabel('Frequency (MHz)')
-                pl.ylabel('°')
-                pl.yticks(np.arange(-180, 200, 30))
-                pl.show()
-
-                # 创建skrf 文件
-                PrintSkrfFile(SkImage, PahseSweepReflect, FrequencyStart, FreqSwepStep,FileName)
-                '''
-                ring_slot = Network('MesureOut.s1p')
-                print(ring_slot)
-
-                ring_slot.plot_s_db() # 幅度曲线
-                pl.show()
-                ring_slot.plot_s_deg()#相位曲线
-                pl.show()
-
-                ring_slot.plot_s_smith()#史密斯圆
-                pl.show()
-                '''
-
-                ## run, and apply calibration to a DUT and display
-                if ApplayCalibration is True:
-                    Cal_Display(FileName)
-                else:
-                    break
-            else:
-                pl.show()
-            Frequency = FrequencyStart
-            PWRlevel = PWRlevelReset
-            AbsYSweepForward = []
-            AbsYSweepReflect = []
-            PahseSweepForward = []
-            PahseSweepReflect = []
-            RangSweep = []
-            SkImage = []
-            vna.SetRF_PWRlevel(PWRlevel)
-
-
-        vna.SetRF_LO_FRQ(Frequency)
-        time.sleep(0.01)
-
-
-        vna.StartSamp()
-
-
-        XCosValue = []
-        # startMs = PrintMstime()
-
-
-        while vna.SerialPort.inWaiting() == 0:
-            pass
-        byte = vna.SerialPort.read(16)
-
-        IF_I_ACC = struct.unpack('<i', byte[0:4])[0]
-        IF_Q_ACC =  struct.unpack('<i', byte[4:8])[0]
-        IF_I_ACC_R = struct.unpack('<i', byte[8:12])[0]
-        IF_Q_ACC_R = struct.unpack('<i', byte[12:16])[0]
-        if (IF_I_ACC != 0):
-
-            # I_Q = np.multiply(np.array(LoSinValue),np.array( LoCosValue))
-
-            Image_F , PahseForward = CalImagePhase(IF_I_ACC, IF_Q_ACC)
-            Image_R , PhaseReflect = CalImagePhase(IF_I_ACC_R, IF_Q_ACC_R)
-            print("%.1f MHz "%Frequency,"Image_F= ", Image_F,"Image_R= ", Image_R, "\n")
+            print("%.1f MHz " % Frequency, "Image_F= ", Image_F, "Image_R= ", Image_R, "\n")
             absY_F = 20 * math.log10(Image_F)  # 求傅里叶变换结果的模.  DBM_3V 3v对应的功率
             absY_R = 20 * math.log10(Image_R)
 
-            if (DISPLAY_MODE == 1):
-
-                pl.clf()  # 清楚画布上的内容
-                n = 0
-                for n in range(N_HALF):
-                    if (XCosValue[n] < 0.05 and XCosValue[n] >= 0 and XCosValue[n + 1] > XCosValue[n]):
-                        break
-                pl.plot(XCosValue[n:n + 100])
-                pl.title('WaveDisplay %d MHZ ' % Frequency + " RL(dB)= %3.2f" % absY_F)
-                pl.yticks(WAVE_Yticks)
-                pl.xlabel('Time (ns)')
-                pl.pause(0.08)
-            ''''// end if  '''
-
-            #print('%d MHZ  %3.5f  %3.5f\n' % (Frequency, PhasePosition, targetPhase))
+            # print('%d MHZ  %3.5f  %3.5f\n' % (Frequency, PhasePosition, targetPhase))
 
             AbsYSweepForward.append(absY_F)  # 幅度in dB
             PahseSweepForward.append(PahseForward)  # 相位
 
             AbsYSweepReflect.append(absY_R)
-            SubPha = PhaseReflect - PahseForward
+            SubPha = PhaseReflect - PahseForward  # 计算相位差
             if (SubPha < 0):
-                   SubPha = 360 + SubPha
+                SubPha = 360 + SubPha
             if (SubPha > 180):
-                    SubPha = (SubPha - 180) - 180
+                SubPha = (SubPha - 180) - 180
             SkImage.append(Image_R)  # skrf 幅度
             PahseSweepReflect.append(SubPha)
-            RangSweep.append(Frequency)
 
-            Frequency = Frequency + FreqSwepStep
-              #time.sleep(0.05)
-'''
-            if(absY_F > -14.5 and  PWRlevel > 0):
-                PWRlevel = PWRlevel - 1
-                vna.SetRF_PWRlevel(PWRlevel)
-                continue
+        #time.sleep(0.01)
+        print(Frequency)
 
-            elif(absY_F < -15.5 and PWRlevel < 63):
-                PWRlevel = PWRlevel + 1
-                vna.SetRF_PWRlevel(PWRlevel)
-                continue
-'''
+        pl.clf()  # 清楚画布上的内容
+        pl.plot(FreqRangSweep, AbsYSweepForward)  # fist scan
+        pl.plot(FreqRangSweep, AbsYSweepReflect)
+        pl.title('S11 RL(dB)')
+        pl.ylabel('dB')
+        pl.xlabel('Frequency (MHz)')
+        pl.yticks(np.arange(-60, 20, 5))
+        pl.grid(axis='y', linestyle='--')
+        pl.show()
+        AbsYSweep = []
+
+        pl.clf()  # 清楚画布上的内容
+        # pl.plot(RangSweep,PahseSweepForward)#显示相位信息
+
+        # SubPhase = np.subtract(np.array(PahseSweepReflect),np.array(PahseSweepForward))
+        pl.plot(FreqRangSweep, PahseSweepReflect)
+        pl.title('S11 RP(°)')
+        pl.xlabel('Frequency (MHz)')
+        pl.ylabel('°')
+        pl.yticks(np.arange(-180, 200, 30))
+        pl.show()
+
+        # 创建skrf touchstone文件
+        # 1 端口
+        PrintTouchSone_1port_File(SkImage, PahseSweepReflect, FrequencyStart, FreqSwepStep,FileName)
+        # 2 端口
+        PrintTouchSone_2port_File(SkImage, PahseSweepReflect, FrequencyStart, FreqSwepStep,FileName, 'S11')
+
+
+        ## run, and apply calibration to a DUT and display
+        if ApplayCalibration is True:
+            Cal_Display(FileName+'.s1p')
+        else:
+            break
+
+        Frequency = FrequencyStart
+        PWRlevel = PWRlevelReset
+        AbsYSweepForward = []
+        AbsYSweepReflect = []
+        PahseSweepForward = []
+        PahseSweepReflect = []
+        RangSweep = []
+        SkImage = []
+        vna.SetRF_PWRlevel(PWRlevel)
+
+
+
+        # startMs = PrintMstime()
+
+
+
+        # I_Q = np.multiply(np.array(LoSinValue),np.array( LoCosValue))
+
+
+
+
+
+
             # print(time.time())
             # print(time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(time.time())))
 if __name__ == '__main__':
     #display and applay calibration
-    VNASampling('MesureOut.s1p',True)
+    VNASampling('MesureOut',True)

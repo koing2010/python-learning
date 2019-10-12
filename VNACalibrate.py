@@ -44,7 +44,6 @@ def OnePortCreatMesureFile(filePath, F_start, F_end, F_step):
         print('file has been!')
         return
 
-
     for FileName in MESURE_FILE_NAME:
         MesureFile = open(filePath + FileName, 'r')
         TempMesureFile = open(filePath + 'Temp' + FileName, 'w+')
@@ -100,7 +99,7 @@ def Cal_Display(fileName):
         pl.yticks(np.arange(-80, 20, 10))
         pl.grid(axis='y', linestyle='--')
         pl.show()
-        # save results
+        #“” save results
         dut_caled.write_touchstone()
 
 
