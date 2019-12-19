@@ -17,7 +17,7 @@ if __name__ == '__main__':
     fs = 24  # 采样频率
     N = 4000  # 采样点数
     N_HALF = 2000 #
-    DISPLAY_MODE = 0# 1 wave, 0 spectrum
+    DISPLAY_MODE = 1# 1 wave, 0 spectrum
     df = fs / (N - 1)  # 分辨率
 
     N_2MHZ = int(round( 2/ df, 0))# Lo= 2Mhz 点的位置
@@ -26,22 +26,24 @@ if __name__ == '__main__':
 
     f = [round(df * n, 5) for n in range(0, N)]  # 构建频率数组
     FFT_Yticks = np.arange(-150, 10, 10)
-    WAVE_Yticks = np.arange(-1, 1.2, 0.2)
+    WAVE_Yticks = np.arange(-0.05, 0.05, 0.01)
 
 
-    Frequency = 2500
+    Frequency = 180
 
     FreqSwepStep = 0
 
     FrequencyEnd = 4400
+    SendMsg = struct.pack('<BBBBBB', 0xFE, 0x05, 0x03, 0x00, 0x00, 0x00)
+    SerialPort.write(SendMsg)
 
     SendMsg = struct.pack('<BBI', 0xFE, 0x03, Frequency * 1000)  # 设置1000MHz采样
     SerialPort.write(SendMsg)
-
+    #byte = SerialPort.read()
     while True:
         if(  FreqSwepStep != 0 and Frequency <= FrequencyEnd):
             Frequency = Frequency + FreqSwepStep
-            SendMsg = struct.pack('<BBI', 0xFE, 0x03,int( Frequency * 1000))  # 设置1000MHz采样
+            SendMsg = struct.pack('<BBI', 0xFE, 0x00,int( Frequency * 1000))  # 设置1000MHz采样
             SerialPort.write(SendMsg)
             time.sleep(0.1)
 
@@ -96,10 +98,10 @@ if __name__ == '__main__':
                 for n in range(N_HALF):
                    if(ForwordXCosValue[n] < 0.1 and ForwordXCosValue[n] >= 0 and ForwordXCosValue[n+1] > ForwordXCosValue[n]):
                        break
-                pl.plot(ForwordXCosValue[n:n+ 120])
+                #pl.plot(ForwordXCosValue[n:n+ 120])
                 pl.plot(ReflectXCosValue[n:n + 120])
-                #pl.plot(XCosValue)
-               # pl.plot(ReflectXCosValue)
+                #pl.plot(ForwordXCosValue)
+                #pl.plot(ReflectXCosValue)
                 pl.title( 'WaveDisplay %d MHZ '%Frequency+" RL(dB)= %3.2f"%Reflect_FFT_ValueAbs[N_2MHZ])
                 pl.yticks(WAVE_Yticks)
                 pl.xlabel('Time (ns)')

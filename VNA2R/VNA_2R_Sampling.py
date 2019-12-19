@@ -20,7 +20,7 @@ if __name__ == '__main__':
     N = 4000  # 采样点数
     N_HALF = 2000 #
     DISPLAY_MODE = 0# 1 wave, 0 spectrum
-    df = fs / (N - 1)  # 分辨率
+    df = fs / (N - 1)  # 分辨率  m'n
 
     N_2MHZ = int(round( 2/ df, 0)) # Lo= 2Mhz 点的位置
     N_4MHZ = int(round( 4/ df, 0))

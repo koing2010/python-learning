@@ -10,9 +10,9 @@ from msvcrt import kbhit
 
 import pywinusb.hid as hid
 
-class UserDevice:
-    vendor_id = 0x07da
-    product_id = 0x2010
+
+vendor_id = 0x7070
+product_id = 0x572b
 
 def sample_handler(data):
     #print("Rxdata",data)
@@ -51,7 +51,7 @@ def raw_test():
                         "(vID=0x{1:04x}, pID=0x{2:04x})"\
                         "".format(device, device.vendor_id, device.product_id))
                 print("{0} => {1}".format(index+1, device_name))
-                if(device.vendor_id == UserDevice.vendor_id) and (device.product_id == UserDevice.product_id):
+                if(device.vendor_id == vendor_id) and (device.product_id == product_id):
                     break
 
             # print("\n\tDevice ('0' to '%d', '0' to exit?) " \

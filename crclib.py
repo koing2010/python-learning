@@ -35,3 +35,14 @@ def calcFCS(pMsg):
 	for i in range(len(pMsg)):
 		result = result^pMsg[i]
 	return result & 0xFF
+
+#display hex string
+def HexShow(S_name,i_string):
+	hex_string = ''
+	hLen = len(i_string)
+	for i in range(hLen):
+		hvol = i_string[i]
+		hhex = '%02X' % (hvol)
+		hex_string += hhex + ' '
+#	print('ReceiveBytes: %i_string' % (hex_string))
+	print(S_name,hex_string,'	total:',hLen)

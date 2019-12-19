@@ -22,10 +22,10 @@ Send_SN = 1
 TyHeader = 0xB8
 ProtocolType= 0x01
 #IEEE64 = bytes.fromhex("08 72 82 BB 0D 00 4B 12 00")#(b'\x08\x7D\x7B\xB76B\x0D\x00\x4B\x12\x00')
-IEEE64 = bytes.fromhex("0A BB 48 1C 00 4B 12 00")
+IEEE64 = bytes.fromhex("0E D6 B5 0A 00 4B 12 00")
 
 #save the device list authenticated00 12 4B 00 0A B5 D2 41"B2 42 D3 12 00 4B 12 00",00 12 4B 00 0D BB 96 50
-DevListAuth =["50 96 BB 0D 00 4B 12 00"]
+DevListAuth =["72 D2 B5 0A 00 4B 12 00","89 84 BB 0D 00 4B 12 00","0E D6 B5 0A 00 4B 12 00"]
 
 print(IEEE64)
 EndPoint = 0x0E
@@ -86,7 +86,7 @@ def inputTxThread(threadName,MsgQue):
             time.sleep(0.1)
             pass
 
-        data = input('Please input CMD')#AutoOpenQueue.get()#input('Please input CMD')
+        data = input('Please input CMD\n')#AutoOpenQueue.get()#input('Please input CMD')
         print(time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(time.time())))
         if (data[0:9] == "OPEN DOOR") or (data[0:9] == "CLOS DOOR") or (data[0:9] == "CHEK DOOR"):#OPEN DOOR123456
             #bytesData = bytes.fromhex(data[9:])
@@ -353,7 +353,7 @@ def HexShow(S_name,i_string):
 #    print(port[0])
 #    Comnumb = port[0]
 #Comnumb=input('输入串口号(如com9):')
-s = serial.Serial("com13",115200)
+s = serial.Serial("com17",115200)
    # s.open()
     #print('Port must be configured before it can be used.')
 

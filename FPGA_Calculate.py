@@ -3,6 +3,7 @@
 import time
 import threading
 import struct
+import sys
 
 import numpy as np
 import pylab as pl
@@ -35,12 +36,11 @@ def PrintMstime():
 
 
 def PrintTouchSone_1port_File(Mage, Vphs, FreqStart, FreqRate, FileName):
-    MesureList = ['# MHz S MA R 50.0\n']
+    MesureList = ['! %d %d %d\n'%(FreqStart, FreqStart + FreqRate * len(Mage), FreqRate)+'# MHz S MA R 50.0\n!freq ReS11 ImS11\n']
     File = open(FileName+ '.s1p', 'w')
     File.write(MesureList[0])
     for size in range(len(Mage)):
-        MesureList.append('%.4f   %.8f   %.4f \n' % (((FreqStart + FreqRate * size), Mage[size], Vphs[size])))
-        File.write(MesureList[size + 1])
+        File.write('%.4f   %.10f   %.10f \n' % (((FreqStart + FreqRate * size), Mage[size], Vphs[size])))
     File.closed
 
 #创建 2 Port 文件
@@ -111,13 +111,21 @@ def SamplingMagAngle(Frequency):
     Image_R, PhaseReflect = CalImagePhase(IF_I_ACC_R, IF_Q_ACC_R)
 
     return   Image_F, PahseForward ,Image_R, PhaseReflect
-def VNASampling(FileName, ApplayCalibration):
 
-    WAVE_Yticks = np.arange(-1, 1.2, 0.2)
+#
+'''
+class VNA_Cal():
+    def __init__(self):
+        self.FrequencyStart = 140 # 目前最小频率 140Mhz
+        self.FrequencyEnd = 4400  # 最大设置4400
+        self.FreqSwepStep = 50
+        self.PWRlevelReset = 38
+'''
+def VNASampling(FileName, ApplayCalibration, PortNum, S_Paramete, DisplaySampling):
 
-    FrequencyStart = 2000 # 目前最小频率 140Mhz
-    FrequencyEnd =3000  # 最大设置4400
-    FreqSwepStep = 5
+    FrequencyStart = 140 # 目前最小频率 140Mhz
+    FrequencyEnd = 4400  # 最大设置4400
+    FreqSwepStep = 10
     PWRlevelReset = 38
 
     AbsYSweepForward = []
@@ -125,49 +133,48 @@ def VNASampling(FileName, ApplayCalibration):
     SkImage = []
 
     PahseSweepForward = []
-    PahseForward = 0
-    ImageForwardDB = 0
     PahseSweepReflect = []
     Frequency = FrequencyStart
     PWRlevel = PWRlevelReset
     vna.SetRF_PWRlevel(PWRlevel)  # set RF output level bit[5:0]
     vna.SetSamplingCKL(0)  # set sampling clock, first Byte H4
 
-    vna.SelectPort(PORT_SEL,  REFLECT_SEL)# (1 = Port2,1 = Port Reflect)
+    vna.SelectPort(S_Paramete)# (1 = Port2,1 = Port Reflect)
     vna.SetRF_LO_FRQ(Frequency)
 
     if(ApplayCalibration is True ):
-        OnePortCreatIdealFile(IDEAL_FILE_PAHT, FrequencyStart, FrequencyEnd, FreqSwepStep) # 创建理论参考文件
-        OnePortCreatMesureFile(MESURE_FILE_PAHT, FrequencyStart, FrequencyEnd, FreqSwepStep)# 提取SOL的测量文件
+        OnePortCreatMesureFile(MESURE_FILE_PAHT, FrequencyStart, FrequencyEnd, FreqSwepStep, S_Paramete)# 提取SOL的测量文件
     #time.sleep(0,5)
 
     FreqRangSweep = np.arange(FrequencyStart, FrequencyEnd , FreqSwepStep)
-    while True:
 
-        for Frequency in FreqRangSweep:
-            Image_F, PahseForward, Image_R, PhaseReflect = SamplingMagAngle(Frequency)
+    duty = 0
+    for Frequency in FreqRangSweep:
+        duty = duty + 1
+        sys.stdout.write("\rSamping... %.1f %%" % ( duty/ len(FreqRangSweep) * 100))
+        Image_F, PahseForward, Image_R, PhaseReflect = SamplingMagAngle(Frequency)
 
-            print("%.1f MHz " % Frequency, "Image_F= ", Image_F, "Image_R= ", Image_R, "\n")
-            absY_F = 20 * math.log10(Image_F)  # 求傅里叶变换结果的模.  DBM_3V 3v对应的功率
-            absY_R = 20 * math.log10(Image_R)
+        #print("%.1f MHz " % Frequency, "Image_F= ", Image_F, "Image_R= ", Image_R, "\n")
+        absY_F = 20 * math.log10(Image_F)  # 求傅里叶变换结果的模.  DBM_3V 3v对应的功率
+        absY_R = 20 * math.log10(Image_R)
 
-            # print('%d MHZ  %3.5f  %3.5f\n' % (Frequency, PhasePosition, targetPhase))
+        # print('%d MHZ  %3.5f  %3.5f\n' % (Frequency, PhasePosition, targetPhase))
 
-            AbsYSweepForward.append(absY_F)  # 幅度in dB
-            PahseSweepForward.append(PahseForward)  # 相位
+        AbsYSweepForward.append(absY_F)  # 幅度in dB
+        PahseSweepForward.append(PahseForward)  # 相位
 
-            AbsYSweepReflect.append(absY_R)
-            SubPha = PhaseReflect - PahseForward  # 计算相位差
-            if (SubPha < 0):
-                SubPha = 360 + SubPha
-            if (SubPha > 180):
-                SubPha = (SubPha - 180) - 180
-            SkImage.append(Image_R)  # skrf 幅度
-            PahseSweepReflect.append(SubPha)
+        AbsYSweepReflect.append(absY_R)
+        SubPha = PhaseReflect - PahseForward  # 计算相位差
+        if (SubPha < 0):
+            SubPha = 360 + SubPha
+        if (SubPha > 180):
+            SubPha = (SubPha - 180) - 180
+        SkImage.append(Image_R)  # skrf 幅度
+        PahseSweepReflect.append(SubPha)
 
-        #time.sleep(0.01)
-        print(Frequency)
-
+    #time.sleep(0.01)
+    print(Frequency)
+    if(DisplaySampling is True):
         pl.clf()  # 清楚画布上的内容
         pl.plot(FreqRangSweep, AbsYSweepForward)  # fist scan
         pl.plot(FreqRangSweep, AbsYSweepReflect)
@@ -190,28 +197,30 @@ def VNASampling(FileName, ApplayCalibration):
         pl.yticks(np.arange(-180, 200, 30))
         pl.show()
 
-        # 创建skrf touchstone文件
-        # 1 端口
+    # 创建skrf touchstone文件
+    # 1 端口
+    if(PortNum == 'OnePort'):
         PrintTouchSone_1port_File(SkImage, PahseSweepReflect, FrequencyStart, FreqSwepStep,FileName)
-        # 2 端口
+
+    else:
+    # 2 端口
         PrintTouchSone_2port_File(SkImage, PahseSweepReflect, FrequencyStart, FreqSwepStep,FileName, 'S11')
 
 
-        ## run, and apply calibration to a DUT and display
-        if ApplayCalibration is True:
-            Cal_Display(FileName+'.s1p')
-        else:
-            break
+    ## run, and apply calibration to a DUT and display
+    #if ApplayCalibration is True:
+     #   Cal_Display(FileName+'.s1p',  'OnePort', S_Paramete)
 
-        Frequency = FrequencyStart
-        PWRlevel = PWRlevelReset
-        AbsYSweepForward = []
-        AbsYSweepReflect = []
-        PahseSweepForward = []
-        PahseSweepReflect = []
-        RangSweep = []
-        SkImage = []
-        vna.SetRF_PWRlevel(PWRlevel)
+
+    Frequency = FrequencyStart
+    PWRlevel = PWRlevelReset
+    AbsYSweepForward = []
+    AbsYSweepReflect = []
+    PahseSweepForward = []
+    PahseSweepReflect = []
+    RangSweep = []
+    SkImage = []
+    vna.SetRF_PWRlevel(PWRlevel)
 
 
 
@@ -226,8 +235,32 @@ def VNASampling(FileName, ApplayCalibration):
 
 
 
-            # print(time.time())
-            # print(time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(time.time())))
+            # print(time.time())localtime
+            # print(time.strftime('%Y-%m-%d %H:%M:%S', time.(time.time())))
 if __name__ == '__main__':
     #display and applay calibration
-    VNASampling('MesureOut',True)
+    S11 = [1, 1]
+    S12 = [1, 2]
+    S21 = [2, 1]
+    S22 = [2, 2]
+    S = [S11, S12, S21, S22]
+    CAL_FILE_NAME = ['S11', 'S12', 'S21', 'S22']
+    i =0
+    for Sparamete in S:
+        VNASampling('measured/throu/MesureOut' + CAL_FILE_NAME[i], True , 'OnePort', Sparamete, False)
+        i = i + 1
+        print('\n')
+    # four_oneports_2_twoport(s11, s12, s21, s22, *args, **kwargs)
+    through = skrf.four_oneports_2_twoport( \
+        skrf.Network('measured/throu/MesureOut' + CAL_FILE_NAME[0] + '.s1p'),
+        skrf.Network('measured/throu/MesureOut' + CAL_FILE_NAME[1] + '.s1p'),
+        skrf.Network('measured/throu/MesureOut' + CAL_FILE_NAME[2] + '.s1p'),
+        skrf.Network('measured/throu/MesureOut' + CAL_FILE_NAME[3] + '.s1p') )
+
+    through.name = 'MesureOut'
+    through.write_touchstone() # save the s2p 文件
+
+    through.plot_s_db()
+    pl.show()
+
+    Cal_Display('MesureOut.s2p',  'TwoPort', [1,1])
